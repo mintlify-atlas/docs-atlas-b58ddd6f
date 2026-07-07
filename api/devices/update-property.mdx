@@ -1,0 +1,113 @@
+---
+title: "PUT /api/my-devices/{id}/properties — Update Device Configuration"
+sidebarTitle: "PUT /properties"
+description: "PUT /api/my-devices/{id}/properties — Upserts a key-value property on a device. Creates the property if it doesn't exist; updates it if it does. Logs the change to device_logs."
+---
+
+Updates or creates a configuration property on a device owned by the authenticated user. Properties are key-value pairs (both stored as strings) that configure device behavior such as automation thresholds and hardware capabilities. Each update is recorded in the device's log as a `COMMAND` entry.
+
+---
+
+## Endpoint
+
+| Field | Value |
+|---|---|
+| **Method** | PUT |
+| **Path** | `/api/my-devices/{id}/properties` |
+| **Auth** | Bearer token required (`Authorization: Bearer YOUR_TOKEN`) |
+
+---
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique ID of the device to configure. The device must belong to the authenticated user.
+</ParamField>
+
+---
+
+## Request Body
+
+<ParamField body="property_key" type="string" required>
+  The name of the property to create or update (e.g. `"humidity_threshold"`, `"auto_water"`). Must be a non-empty string.
+</ParamField>
+
+<ParamField body="property_value" type="string" required>
+  The new value for the property. Always provided as a string, even for boolean or numeric values (e.g. `"true"`, `"45"`).
+</ParamField>
+
+---
+
+## Common Property Keys
+
+| Key | Example Value | Description |
+|---|---|---|
+| `auto_water` | `"true"` | Enable automatic watering when humidity drops below threshold |
+| `humidity_threshold` | `"45"` | Humidity percentage that triggers the auto\_water pump |
+| `has_pump` | `"true"` | Indicates the device has a pump actuator |
+| `has_humidity` | `"true"` | Indicates the device has a soil humidity sensor |
+| `has_light` | `"false"` | Indicates the device has a light sensor |
+
+---
+
+## Request Example
+
+```bash
+curl -X PUT http://localhost/api/my-devices/1/properties \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_key": "humidity_threshold", "property_value": "45"}'
+```
+
+---
+
+## Responses
+
+### 200 OK
+
+The property was created or updated successfully. A `COMMAND` log entry is written to `device_logs` capturing which key was changed and its new value.
+
+```json
+{
+  "status": "success",
+  "message": "Configuración guardada correctamente"
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation that the configuration was saved.
+</ResponseField>
+
+### 404 Not Found
+
+The device does not exist or does not belong to the authenticated user.
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no encontrado"
+}
+```
+
+### 422 Unprocessable Entity
+
+One or both required fields (`property_key`, `property_value`) are missing or not strings.
+
+```json
+{
+  "message": "The property key field is required.",
+  "errors": {
+    "property_key": ["The property key field is required."]
+  }
+}
+```
+
+---
+
+<Tip>
+  To update multiple properties, call this endpoint once per property key. Each call is an upsert — it creates the property if it doesn't exist, or overwrites the existing value if it does.
+</Tip>

@@ -1,0 +1,123 @@
+---
+title: "Smart Enviro Backend Architecture Overview"
+sidebarTitle: "Architecture"
+description: "How Smart Enviro Backend connects ESP32 microcontrollers, mobile clients, and the Laravel API server through device tokens, Sanctum bearer tokens, and a MySQL telemetry store."
+---
+
+Smart Enviro Backend is structured around three distinct layers that never share authentication mechanisms. At the hardware layer, ESP32 microcontrollers authenticate exclusively with a static `device_token` stored in the `devices` table — no session cookies, no bearer headers. In the middle sits the Laravel 11 API server (PHP 8.4 + Laravel Sanctum), which routes requests, enforces access control, and persists all telemetry to MySQL. At the top, mobile apps and web dashboards authenticate with Sanctum Bearer tokens obtained at login, then call the full suite of device-management and sensor-history endpoints.
+
+## System Components
+
+| Component | Role |
+|-----------|------|
+| **ESP32 Devices** | Authenticate with `device_token` query param; call `GET /api/device/sync` to receive commands and config; push readings via `POST /api/sensor-data` |
+| **Laravel API** | PHP 8.4 application handling routing, `auth:sanctum` middleware, business logic via controllers, and persistence to MySQL |
+| **Mobile/Web Client** | Authenticates with a Sanctum Bearer token; discovers and claims unowned devices; toggles actuator states; queries sensor history |
+| **MySQL 8.x** | Persists all application data across six tables: `users`, `devices`, `device_properties`, `sensor_types`, `sensor_data`, `device_logs` |
+| **Redis 7.x** | Cache and queue backend for the Laravel application |
+
+## Request Flow
+
+### Mobile/Web Client Flow
+
+<Steps>
+  <Step title="Register">
+    Client calls `POST /api/register` with `name`, `email`, `password`, and `password_confirmation`. Returns `201 Created` on success — no token is issued at registration.
+  </Step>
+  <Step title="Login">
+    Client calls `POST /api/login` with `email` and `password`. On success the API creates a Sanctum token, stores its plain-text value in `users.current_token`, and returns it in the response body.
+  </Step>
+  <Step title="Call Protected Endpoints">
+    Every subsequent request includes the token as `Authorization: Bearer {token}`. The `auth:sanctum` middleware validates the token and resolves the authenticated user.
+  </Step>
+  <Step title="Logout">
+    Client calls `DELETE /api/logout`. The API deletes the current Sanctum access token and sets `users.current_token` back to `null`, immediately invalidating the session.
+  </Step>
+</Steps>
+
+### ESP32 Device Flow
+
+<Steps>
+  <Step title="Boot and Sync">
+    On startup the device calls `GET /api/device/sync?device_token={token}`. The API looks up the device by its token, verifies it is active, updates `last_seen_at` and `is_online`, then returns the current command and any config properties the device should apply.
+  </Step>
+  <Step title="Push Sensor Readings">
+    At each measurement interval the device posts to `POST /api/sensor-data` with `device_token` in the request body alongside the sensor readings. The API validates the token, resolves the device, and writes one `sensor_data` row per reading.
+  </Step>
+  <Step title="Receive Updated Control State">
+    The sync and sensor-data responses both carry a `device_control` payload so the ESP32 always knows the latest commanded state (`ON`, `OFF`, or `STANDBY`) without needing a persistent connection.
+  </Step>
+</Steps>
+
+## Route Groups
+
+There are three distinct route groups defined in `routes/api.php`:
+
+### 1. Public Routes — No Authentication Required
+
+| Method | URI | Handler |
+|--------|-----|---------|
+| `POST` | `/api/login` | `AuthController@login` |
+| `POST` | `/api/register` | `AuthController@register` |
+| `GET` | `/api/device/sync` | `DeviceSyncController@sync` |
+
+These endpoints are intentionally unauthenticated. `device/sync` relies on the `device_token` query parameter for its own device-level authorization rather than Sanctum middleware.
+
+### 2. Protected Routes — `auth:sanctum` Middleware
+
+| Method | URI | Handler |
+|--------|-----|---------|
+| `GET` | `/api/my-devices` | `UserDeviceController@index` |
+| `GET` | `/api/my-devices/{id}` | `UserDeviceController@show` |
+| `POST` | `/api/my-devices/{id}/toggle` | `UserDeviceController@toggleState` |
+| `PUT` | `/api/my-devices/{id}/properties` | `UserDeviceController@updateProperty` |
+| `GET` | `/api/devices/available` | `UserDeviceController@listAvailable` |
+| `POST` | `/api/devices/{id}/add` | `UserDeviceController@addDevice` |
+| `GET` | `/api/sensor-data/history` | `SensorDataController@getHistory` |
+| `DELETE` | `/api/logout` | `AuthController@logout` |
+| `GET` | `/api/user` | Closure — returns authenticated user |
+
+<Note>
+  `GET /api/sensor-data/history` is declared **before** the `apiResource` registration so that Laravel's router matches it as a named route rather than treating `history` as a `{sensor_data}` wildcard segment.
+</Note>
+
+### 3. API Resource Routes — `sensor-data`
+
+The `apiResource` registration for `sensor-data` excludes the `update` method, leaving four actions:
+
+| Method | URI | Handler | Auth |
+|--------|-----|---------|------|
+| `GET` | `/api/sensor-data` | `SensorDataController@index` | None |
+| `POST` | `/api/sensor-data` | `SensorDataController@store` | device_token in body |
+| `GET` | `/api/sensor-data/{sensor_data}` | `SensorDataController@show` | None |
+| `DELETE` | `/api/sensor-data/{sensor_data}` | `SensorDataController@destroy` | None |
+
+## Single-Session Enforcement
+
+Smart Enviro Backend allows only **one active session per user account** at any given time. This is enforced through the `current_token` column added to the `users` table:
+
+- **Login** — after issuing a new Sanctum token the API saves its plain-text value to `users.current_token`. If `current_token` is already non-null when a login request arrives, the API returns **`409 Conflict`** with `{"status": "error", "message": "Cuenta en uso en otro dispositivo"}` and does not issue a new token.
+- **Logout** — the API deletes the Sanctum token record and sets `current_token` back to `null`, freeing the account for a fresh login.
+
+<Warning>
+  The `current_token` column stores the raw Sanctum plain-text token. This column is declared in the `#[Hidden]` attribute on the `User` model so it is never serialised into API responses.
+</Warning>
+
+---
+
+<CardGroup cols={2}>
+  <Card
+    title="Data Model"
+    icon="database"
+    href="/concepts/data-model"
+  >
+    Full schema reference for all six MySQL tables, column types, constraints, and Eloquent relationships.
+  </Card>
+  <Card
+    title="Authentication"
+    icon="lock"
+    href="/concepts/authentication"
+  >
+    How Sanctum Bearer tokens and device_token strings work, with curl examples for every auth flow.
+  </Card>
+</CardGroup>

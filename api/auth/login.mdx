@@ -1,0 +1,131 @@
+---
+title: "POST /api/login — Authenticate and Get Bearer Token"
+sidebarTitle: "POST /api/login"
+description: "POST /api/login — Validates email and password, creates a Sanctum personal access token, and enforces single-session policy. Returns user object and bearer token."
+---
+
+The login endpoint validates a user's credentials and issues a Laravel Sanctum personal access token. Smart Enviro Backend enforces a single active session per user — if the account already has an active token stored in `users.current_token`, the request returns `409 Conflict` without revoking the existing session.
+
+<Note>
+  **Endpoint**
+
+  | Field         | Value        |
+  | ------------- | ------------ |
+  | Method        | `POST`       |
+  | Path          | `/api/login` |
+  | Auth required | No           |
+</Note>
+
+## Request Body
+
+<ParamField body="email" type="string" required>
+  Valid email address of the registered user.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password.
+</ParamField>
+
+## Request Example
+
+```bash
+curl -X POST http://localhost/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "secret123"}'
+```
+
+## Responses
+
+### 200 OK — Login successful
+
+Credentials matched and no active session existed. Returns the authenticated user object and a plain-text Sanctum bearer token.
+
+```json
+{
+  "status": "success",
+  "message": "Inicio de sesión exitoso",
+  "data": {
+    "user": {
+      "id": 1,
+      "name": "Jane Doe",
+      "email": "user@example.com",
+      "created_at": "2024-01-01T00:00:00.000000Z",
+      "updated_at": "2024-01-15T10:00:00.000000Z"
+    },
+    "token": "1|abc123xyzdef456..."
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation message (`"Inicio de sesión exitoso"`).
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Wrapper object containing the authenticated user and the issued token.
+
+  <Expandable title="data fields">
+    <ResponseField name="data.user" type="object">
+      The authenticated user record. Includes `id`, `name`, `email`, `created_at`, and `updated_at`. Does **not** include `password` or `current_token`.
+    </ResponseField>
+
+    <ResponseField name="data.token" type="string">
+      Plain-text Laravel Sanctum personal access token in the format `{id}|{token}`. Pass this value as a `Bearer` token in subsequent authenticated requests.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### 401 Unauthorized — Wrong credentials
+
+The email does not exist or the password does not match the stored hash.
+
+```json
+{"status": "error", "message": "Credenciales incorrectas"}
+```
+
+---
+
+### 409 Conflict — Account already has an active session
+
+The user record has a non-null `current_token`, meaning the account is already logged in on another device.
+
+```json
+{"status": "error", "message": "Cuenta en uso en otro dispositivo"}
+```
+
+---
+
+### 422 Unprocessable Entity — Validation failed
+
+The request body is missing a required field or the `email` value is not a valid email address. Laravel returns a standard validation error response body with a `errors` object keyed by field name.
+
+---
+
+## Using the Token
+
+Include the token returned in the `data.token` field as a `Bearer` token in the `Authorization` header for all authenticated endpoints:
+
+```bash
+Authorization: Bearer 1|abc123xyzdef456...
+```
+
+Example authenticated request:
+
+```bash
+curl -X GET http://localhost/api/some-protected-route \
+  -H "Authorization: Bearer 1|abc123xyzdef456..."
+```
+
+<Note>
+  The returned `token` is a plain-text Sanctum token. Store it securely (e.g. in secure storage on mobile) and never expose it in URLs or logs.
+</Note>
+
+<Warning>
+  Smart Enviro Backend allows only one active session per user. Call `DELETE /api/logout` from the current session before logging in on a new device. Attempting to log in while a session is active returns `409 Conflict` — the existing token is **not** revoked automatically.
+</Warning>

@@ -1,47 +1,154 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Smart Enviro Backend"
+sidebarTitle: "Quickstart"
+description: "Set up Smart Enviro Backend locally using Docker and Laravel Sail, run migrations, and make your first authenticated API call in under 10 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+This guide walks you through cloning the repository, spinning up MySQL 8 and Redis via Laravel Sail (Docker Compose), running database migrations, and making your first authenticated API call. No local PHP or Composer installation is required — everything runs inside containers managed by Sail.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Warning>
+  **Windows users:** Clone the repository and run all commands from inside the **WSL2 (Ubuntu)** filesystem (e.g. `~/smart_enviro_backend`), not from a Windows-mounted path such as `/mnt/c/...`. Running from a Windows filesystem causes file permission errors that break Laravel's storage and cache layers.
+</Warning>
 
 ## Prerequisites
 
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
-
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
-
-    ```bash
-    npm install your-package
-    ```
+  <Step title="Docker Desktop">
+    Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and make sure it is running. Windows users must also enable the **WSL2 integration** in Docker Desktop → Settings → Resources → WSL Integration.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
-
-    ```bash
-    your-cli init
-    ```
+  <Step title="Git">
+    Install [Git](https://git-scm.com/) so you can clone the repository.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
-
-    ```bash
-    your-cli start
-    ```
+  <Step title="WSL2 with Ubuntu (Windows only)">
+    Install Ubuntu from the Microsoft Store and configure it as your default WSL2 distribution. Open all subsequent terminal sessions from the Ubuntu shell.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Setup
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/GaelCeballos/Smart_Enviro_Backend.git && cd Smart_Enviro_Backend
+    ```
+  </Step>
+
+  <Step title="Copy the environment file">
+    ```bash
+    cp .env.example .env
+    ```
+
+    Open `.env` in your editor and fill in the database credentials before starting containers:
+
+    ```bash
+    DB_DATABASE=smart_enviro
+    DB_USERNAME=sail
+    DB_PASSWORD=password
+    ```
+
+    <Note>
+      The `DB_CONNECTION` defaults to `sqlite` in `.env.example`. Change it to `mysql` and uncomment the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` lines when using Sail.
+    </Note>
+  </Step>
+
+  <Step title="Start Sail (Docker)">
+    ```bash
+    ./vendor/bin/sail up -d
+    ```
+
+    This command builds the Sail image and starts three containers in the background:
+
+    | Service | Default port |
+    | :--- | :--- |
+    | Laravel application | `80` |
+    | MySQL 8.4 | `3306` |
+    | Redis (Alpine) | `6379` |
+
+    Wait until all containers report a **healthy** status before proceeding. You can check with `./vendor/bin/sail ps`.
+  </Step>
+
+  <Step title="Generate the application key">
+    ```bash
+    ./vendor/bin/sail artisan key:generate
+    ```
+
+    This writes a fresh `APP_KEY` value into your `.env` file. Laravel uses it to encrypt sessions, cookies, and other signed data.
+  </Step>
+
+  <Step title="Run database migrations">
+    ```bash
+    ./vendor/bin/sail artisan migrate
+    ```
+
+    This creates all required tables — users, devices, sensor readings, Sanctum tokens, sessions, and cache — inside the MySQL container.
+  </Step>
+
+  <Step title="(Optional) Run the test suite">
+    ```bash
+    ./vendor/bin/sail artisan test
+    ```
+
+    Pest runs the full Feature and Unit test suite against a dedicated testing database. All tests should pass on a clean install.
+  </Step>
+</Steps>
+
+## First API Call
+
+With the stack running, you can register a user and obtain an API token in two requests.
+
+**Register a new user:**
+
+```bash
+curl -X POST http://localhost/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test User", "email": "test@example.com", "password": "password123", "password_confirmation": "password123"}'
+```
+
+**Log in and retrieve a token:**
+
+```bash
+curl -X POST http://localhost/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "password123"}'
+```
+
+A successful login returns a JSON envelope containing the authenticated user and a Sanctum plain-text token:
+
+```json
+{
+  "status": "success",
+  "message": "Inicio de sesión exitoso",
+  "data": {
+    "user": {
+      "id": 1,
+      "name": "Test User",
+      "email": "test@example.com"
+    },
+    "token": "1|abc123..."
+  }
+}
+```
+
+Pass this token in the `Authorization` header for all subsequent requests to protected endpoints:
+
+```bash
+curl http://localhost/api/my-devices \
+  -H "Authorization: Bearer 1|abc123..."
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="concepts/authentication">
+    Learn how Sanctum token issuance, single-session enforcement, and logout work.
+  </Card>
+  <Card title="Devices Overview" icon="microchip" href="devices/overview">
+    Discover how to claim devices, toggle actuator states, and update device properties.
+  </Card>
+  <Card title="Login Endpoint" icon="arrow-right-to-bracket" href="api/auth/login">
+    Full reference for the `/api/login` endpoint — request body, responses, and error codes.
+  </Card>
+  <Card title="Store Sensor Data" icon="database" href="api/sensor-data/store">
+    Reference for posting ESP32 telemetry to `/api/sensor-data` using a device token.
+  </Card>
+</CardGroup>

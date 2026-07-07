@@ -1,0 +1,104 @@
+---
+title: "POST /api/my-devices/{id}/toggle — Change Device Actuator State"
+sidebarTitle: "POST /toggle"
+description: "POST /api/my-devices/{id}/toggle — Sets the current_state of a device to ON, OFF, or STANDBY. The ESP32 receives the updated command on its next sync or sensor-data call."
+---
+
+Toggles the actuator state of a device owned by the authenticated user. The new `current_state` (`ON`, `OFF`, or `STANDBY`) is persisted and returned to the ESP32 on its next `GET /api/device/sync` call or in the `device_control` block of the next `POST /api/sensor-data` response.
+
+---
+
+## Endpoint
+
+| Field | Value |
+|---|---|
+| **Method** | POST |
+| **Path** | `/api/my-devices/{id}/toggle` |
+| **Auth** | Bearer token required (`Authorization: Bearer YOUR_TOKEN`) |
+
+---
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique ID of the device whose state should be changed. The device must belong to the authenticated user.
+</ParamField>
+
+---
+
+## Request Body
+
+<ParamField body="state" type="string" required>
+  The new actuator state to set. Must be exactly one of:
+
+  - `ON` — activate the actuator
+  - `OFF` — deactivate the actuator
+  - `STANDBY` — place the device in standby mode
+</ParamField>
+
+### Request Example
+
+```bash
+curl -X POST http://localhost/api/my-devices/1/toggle \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"state": "ON"}'
+```
+
+---
+
+## Responses
+
+### 200 OK
+
+The device state was updated successfully.
+
+```json
+{
+  "status": "success",
+  "message": "Estado actualizado a ON",
+  "current_state": "ON"
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation including the new state (e.g. `"Estado actualizado a ON"`).
+</ResponseField>
+
+<ResponseField name="current_state" type="string">
+  The device's new state after the update: `ON`, `OFF`, or `STANDBY`.
+</ResponseField>
+
+### 404 Not Found
+
+The device does not exist or does not belong to the authenticated user.
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no encontrado"
+}
+```
+
+### 422 Unprocessable Entity
+
+The `state` field is missing or contains a value other than `ON`, `OFF`, or `STANDBY`.
+
+```json
+{
+  "message": "The state field must be one of ON, OFF, STANDBY.",
+  "errors": {
+    "state": ["The selected state is invalid."]
+  }
+}
+```
+
+---
+
+<Note>
+  The state change is not pushed to the device in real-time. The ESP32 will receive the new command on its next `GET /api/device/sync` request or in the `device_control.current_state` field of its next sensor data response.
+</Note>

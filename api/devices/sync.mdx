@@ -1,0 +1,99 @@
+---
+title: "GET /api/device/sync — ESP32 Boot Sync and Command Fetch"
+sidebarTitle: "GET /device/sync"
+description: "GET /api/device/sync — Called by ESP32 on boot and periodically. Authenticates the device_token, updates online status, and returns the current command and configuration properties."
+---
+
+This is the primary endpoint for ESP32 devices to synchronize with the backend. The device sends its `device_token` as a query parameter and receives its current command (`ON`, `OFF`, or `STANDBY`) and the full set of configuration properties. This endpoint requires no user authentication — only the device token.
+
+---
+
+## Endpoint
+
+| Field | Value |
+|---|---|
+| **Method** | GET |
+| **Path** | `/api/device/sync` |
+| **Auth** | `device_token` query parameter — no Bearer token required |
+
+---
+
+## Query Parameters
+
+<ParamField query="device_token" type="string" required>
+  The 64-character device token provisioned in the database when the device was registered. This is the sole authentication mechanism for ESP32 devices.
+</ParamField>
+
+---
+
+## Request Example
+
+```bash
+curl -X GET "http://localhost/api/device/sync?device_token=YOUR_64_CHAR_TOKEN"
+```
+
+---
+
+## Responses
+
+### 200 OK
+
+The device token is valid and the device is active. The backend responds with the current command and the device's full configuration property map.
+
+```json
+{
+  "status": "success",
+  "command": "STANDBY",
+  "config": {
+    "auto_water": "true",
+    "humidity_threshold": "60",
+    "dimmer_level": "75"
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="command" type="string">
+  The current actuator command for the device. Possible values:
+
+  - `ON` — activate the actuator
+  - `OFF` — deactivate the actuator
+  - `STANDBY` — hold in standby mode
+  - `SLEEP` — only returned on a 401; instructs the ESP32 to enter deep sleep
+</ResponseField>
+
+<ResponseField name="config" type="object">
+  A flat key→value map of all `device_properties` rows for this device. Keys are the `property_key` column values; values are always strings. The set of keys varies per device based on its configured properties.
+
+  Example keys: `"auto_water"`, `"humidity_threshold"`, `"dimmer_level"`, `"has_pump"`, `"has_humidity"`.
+</ResponseField>
+
+### 401 Unauthorized
+
+The `device_token` does not match any device in the database, or the matching device has `is_active = false`. The ESP32 should enter deep sleep to conserve battery.
+
+```json
+{
+  "status": "error",
+  "command": "SLEEP"
+}
+```
+
+---
+
+<Tip>
+  The `command` field maps directly to the device's `current_state` column. The ESP32 firmware should enter deep sleep when `command` is `SLEEP` — this is returned whenever the device token is invalid or the device is marked inactive.
+</Tip>
+
+<Note>
+  The `config` object contains all `device_properties` rows for this device as a flat key→value map. Property keys are defined by the `property_key` column in the `device_properties` table. Update individual properties via `PUT /api/my-devices/{id}/properties`.
+</Note>
+
+---
+
+## Recommended Call Frequency
+
+Call this endpoint on every ESP32 boot, then again every 5 minutes to pick up configuration changes or new commands set by the user through the mobile app.

@@ -1,0 +1,73 @@
+---
+title: "DELETE /api/logout — Revoke Current Session Token"
+sidebarTitle: "DELETE /api/logout"
+description: "DELETE /api/logout — Revokes the current Sanctum bearer token and clears the single-session lock, allowing the user to log in from another device."
+---
+
+The logout endpoint revokes the current bearer token and clears the `current_token` field on the user record, releasing the single-session lock enforced by Smart Enviro Backend. After calling this endpoint, the same credentials can be used to log in from any device.
+
+<Note>
+  **Endpoint**
+
+  | Field         | Value                             |
+  | ------------- | --------------------------------- |
+  | Method        | `DELETE`                          |
+  | Path          | `/api/logout`                     |
+  | Auth required | Yes — `Authorization: Bearer {token}` |
+</Note>
+
+## Request Example
+
+```bash
+curl -X DELETE http://localhost/api/logout \
+  -H "Authorization: Bearer 1|abc123..."
+```
+
+No request body is required. The user identity is resolved entirely from the bearer token in the `Authorization` header.
+
+## What Happens on Logout
+
+Calling this endpoint performs two operations atomically:
+
+1. **Clears `users.current_token`** — Sets the `current_token` column on the authenticated user's record to `null`, releasing the single-session lock so the account can log in again from any device.
+2. **Deletes the Sanctum token record** — Removes the corresponding row from the `personal_access_tokens` table via `currentAccessToken()->delete()`, immediately invalidating the token for all future requests.
+
+After a successful logout, any subsequent request using the same bearer token will be rejected with `401 Unauthorized`.
+
+## Responses
+
+### 200 OK — Logout successful
+
+The token was revoked and the session lock was cleared.
+
+```json
+{"status": "success", "message": "Cierre de sesión exitoso"}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation message (`"Cierre de sesión exitoso"`).
+</ResponseField>
+
+---
+
+### 401 Unauthorized — No valid token provided
+
+Returned when the `Authorization` header is missing, malformed, or contains a token that has already been revoked.
+
+```json
+{"status": "error", "message": "Usuario no autenticado"}
+```
+
+---
+
+<Note>
+  This endpoint uses the HTTP `DELETE` method, not `POST`. Ensure your HTTP client or mobile app explicitly sets the request method to `DELETE` — some clients default to `GET` or `POST` when a body is not provided.
+</Note>
+
+<Warning>
+  Once a token is revoked it cannot be recovered. If your client loses the token before calling logout, the only way to release the single-session lock is to contact an administrator to clear `current_token` directly, or to call `DELETE /api/logout` with the original token if it is still available.
+</Warning>

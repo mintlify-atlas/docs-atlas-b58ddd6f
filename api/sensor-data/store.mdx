@@ -1,0 +1,148 @@
+---
+title: "POST /api/sensor-data — Submit a Sensor Reading from ESP32"
+sidebarTitle: "POST /sensor-data"
+description: "POST /api/sensor-data — Authenticates via device_token, stores a sensor reading, updates device online status, and returns the device_control block with the current actuator command."
+---
+
+The primary ingestion endpoint for ESP32 devices to submit sensor readings. The device authenticates with its `device_token` (not a Bearer token), the backend validates the sensor metric key, stores the reading, updates the device's last-seen timestamp, and returns a `device_control` block with the current actuator command and automation settings.
+
+## Endpoint
+
+**POST** `/api/sensor-data`
+
+**Auth:** `device_token` in request body (no Bearer token required)
+
+## Request Body
+
+<ParamField body="device_token" type="string" required>
+  The 64-character secret token assigned to the ESP32 device. Used to authenticate the device and look up its record. The device must be active (`is_active = true`) in the database.
+</ParamField>
+
+<ParamField body="sensor_type_id" type="string" required>
+  The `metric_key` of the sensor type to record (e.g. `humedad_suelo`, `temp_amb`). The backend resolves this string to the corresponding `sensor_types` database record. If `metric_key` is also provided in the payload, it takes precedence over this field.
+</ParamField>
+
+<ParamField body="value" type="number" required>
+  The numeric sensor reading value to store. Stored as a `DECIMAL(10,4)` in the `sensor_data` table.
+</ParamField>
+
+<ParamField body="metric_key" type="string">
+  Optional alias for `sensor_type_id`. If provided, this value takes precedence over `sensor_type_id` when resolving the sensor type. Both fields accept the same `metric_key` string format.
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X POST http://localhost/api/sensor-data \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_token": "YOUR_64_CHAR_TOKEN",
+    "sensor_type_id": "humedad_suelo",
+    "value": 73.5
+  }'
+```
+
+## Responses
+
+### 201 Created
+
+The reading was stored successfully. The response includes the saved record and the `device_control` block the ESP32 should use to update its actuator state.
+
+```json
+{
+  "status": "success",
+  "message": "Lectura guardada correctamente",
+  "data": {
+    "id": 42,
+    "device_id": 3,
+    "sensor_type_id": 2,
+    "reading_value": 73.5,
+    "recorded_at": "2024-01-15T10:30:00.000000Z"
+  },
+  "device_control": {
+    "current_state": "STANDBY",
+    "auto_water": false,
+    "humidity_threshold": 60
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 201 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation message (`"Lectura guardada correctamente"`).
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The newly created `sensor_data` record as persisted in the database.
+
+  <Expandable title="data fields">
+    <ResponseField name="data.id" type="integer">
+      Auto-incremented primary key of the new sensor reading record.
+    </ResponseField>
+
+    <ResponseField name="data.device_id" type="integer">
+      Foreign key referencing the authenticated device's `id` in the `devices` table.
+    </ResponseField>
+
+    <ResponseField name="data.sensor_type_id" type="integer">
+      Foreign key referencing the resolved `sensor_types` record integer ID (not the `metric_key` string).
+    </ResponseField>
+
+    <ResponseField name="data.reading_value" type="number">
+      The stored sensor value, cast as a float. Stored internally as `DECIMAL(10,4)`.
+    </ResponseField>
+
+    <ResponseField name="data.recorded_at" type="string">
+      ISO 8601 UTC timestamp of when the reading was stored. Defaults to the current server time (`useCurrent()`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="device_control" type="object">
+  Configuration block for the ESP32 to update its actuator state. Sourced from the device's `properties` key-value store.
+
+  <Expandable title="device_control fields">
+    <ResponseField name="device_control.current_state" type="string">
+      The current operating mode of the device (e.g. `"STANDBY"`, `"ON"`, `"OFF"`). Falls back to `"STANDBY"` if not set.
+    </ResponseField>
+
+    <ResponseField name="device_control.auto_water" type="boolean">
+      Whether automatic watering is enabled for this device. Sourced from the `auto_water` device property. Defaults to `false`.
+    </ResponseField>
+
+    <ResponseField name="device_control.humidity_threshold" type="integer">
+      The humidity threshold percentage at which automatic watering triggers. Sourced from the `humidity_threshold` device property. Defaults to `60`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 401 Unauthorized
+
+The `device_token` does not match any active device (either the token is invalid or the device has `is_active = false`).
+
+```json
+{"status": "error", "message": "Dispositivo no autorizado o dado de baja"}
+```
+
+### 404 Not Found
+
+The resolved `metric_key` (from `sensor_type_id` or `metric_key`) does not match any registered `sensor_types` record.
+
+```json
+{"status": "error", "message": "Tipo de sensor 'xyz' no está registrado"}
+```
+
+### 422 Unprocessable Entity
+
+One or more required fields (`device_token`, `sensor_type_id`, `value`) are missing or fail Laravel's validation rules.
+
+<Tip>
+  The ESP32 should read `device_control.current_state` from every response to update its actuator state without requiring a separate sync call.
+</Tip>
+
+<Note>
+  The `sensor_type_id` field accepts the `metric_key` string (not the database integer ID). The backend resolves the metric key to the corresponding `sensor_types` record. For example, pass `"humedad_suelo"` or `"temp_amb"`, not `2` or `1`.
+</Note>

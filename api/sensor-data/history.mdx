@@ -1,0 +1,106 @@
+---
+title: "GET /api/sensor-data/history — Aggregated Sensor History for Charts"
+sidebarTitle: "GET /history"
+description: "GET /api/sensor-data/history — Returns averaged sensor readings grouped by hour (day), day (week/month). Requires auth. Use for time-series charts in dashboards."
+---
+
+Returns sensor readings averaged over time intervals for chart rendering. For a daily view, readings are averaged per hour over the last 24 hours. For weekly and monthly views, readings are averaged per calendar day. This endpoint requires Bearer token authentication.
+
+## Endpoint
+
+**GET** `/api/sensor-data/history`
+
+**Auth:** Bearer token required (Sanctum)
+
+<Note>
+  This route is defined **before** the `apiResource` registration in `routes/api.php` to avoid route conflicts with the `show` action. It requires authentication with a Sanctum Bearer token — requests without a valid token will receive a `401 Unauthenticated` response.
+</Note>
+
+## Query Parameters
+
+<ParamField query="device_id" type="integer" required>
+  The integer database ID of the device whose readings should be aggregated.
+</ParamField>
+
+<ParamField query="sensor_type_id" type="integer" required>
+  The integer database ID of the sensor type to aggregate. This endpoint expects the integer ID, not the `metric_key` string.
+</ParamField>
+
+<ParamField query="period" type="string" required>
+  The time window and grouping strategy for aggregation. Accepted values: `day`, `week`, `month`.
+</ParamField>
+
+## Period Reference
+
+| Period  | Window        | Grouping          | SQL Aggregation                                      |
+|---------|---------------|-------------------|------------------------------------------------------|
+| `day`   | Last 24 hours | Per hour          | `AVG` grouped by `DATE_FORMAT(recorded_at, '%H:00')` |
+| `week`  | Last 7 days   | Per calendar day  | `AVG` grouped by `DATE(recorded_at)`                 |
+| `month` | Last 30 days  | Per calendar day  | `AVG` grouped by `DATE(recorded_at)`                 |
+
+## Example Request
+
+```bash
+curl -X GET "http://localhost/api/sensor-data/history?device_id=3&sensor_type_id=2&period=day" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Responses
+
+### 200 OK
+
+Returns the averaged data points ordered chronologically by label (ascending). Only time slots that have at least one reading are included — empty hours or days are omitted.
+
+```json
+{
+  "status": "success",
+  "period": "day",
+  "count": 6,
+  "data": [
+    {"label": "08:00", "value": 71.2},
+    {"label": "09:00", "value": 72.8},
+    {"label": "10:00", "value": 73.5},
+    {"label": "11:00", "value": 74.1},
+    {"label": "12:00", "value": 70.9},
+    {"label": "13:00", "value": 69.4}
+  ]
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="period" type="string">
+  Echoes back the requested `period` value (`"day"`, `"week"`, or `"month"`).
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  The number of aggregated data points returned in the `data` array. Equals the number of distinct hours or days that had at least one reading in the time window.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of aggregated data point objects, ordered ascending by `label`.
+
+  <Expandable title="data[] item fields">
+    <ResponseField name="data[].label" type="string">
+      The x-axis label for the data point. For `day` period, formatted as `"HH:00"` (e.g. `"08:00"`). For `week` and `month` periods, formatted as an ISO date string (e.g. `"2024-01-15"`).
+    </ResponseField>
+
+    <ResponseField name="data[].value" type="number">
+      The averaged `reading_value` across all readings in the grouped time slot. Computed by MySQL `AVG()`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 401 Unauthenticated
+
+No Bearer token was provided or the token is invalid/expired.
+
+### 422 Unprocessable Entity
+
+One or more required query parameters (`device_id`, `sensor_type_id`, `period`) are missing, or `period` is not one of `day`, `week`, `month`.
+
+<Tip>
+  The `label` field is ready to use as a chart x-axis label. For `day` period, labels are like `"08:00"`. For `week` and `month` periods, labels are ISO date strings like `"2024-01-15"`. Only time slots with actual readings are included, so the array may have gaps.
+</Tip>

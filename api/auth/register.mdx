@@ -1,0 +1,94 @@
+---
+title: "POST /api/register — Create a New User Account"
+sidebarTitle: "POST /api/register"
+description: "POST /api/register — Creates a new user account with name, email, and password. Password must be confirmed. Returns 201 on success without issuing a token."
+---
+
+The register endpoint creates a new user account in Smart Enviro Backend. On success, it returns a `201 Created` response without issuing a token — clients must call `POST /api/login` separately to obtain a bearer token and begin an authenticated session.
+
+<Note>
+  **Endpoint**
+
+  | Field         | Value           |
+  | ------------- | --------------- |
+  | Method        | `POST`          |
+  | Path          | `/api/register` |
+  | Auth required | No              |
+</Note>
+
+## Request Body
+
+<ParamField body="name" type="string" required>
+  Display name for the user. Maximum 255 characters.
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Must be a valid email address and **unique** across all existing user accounts. Registration fails with `422` if the email is already taken.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password. Minimum 8 characters. Stored as a bcrypt hash — the plain-text value is never persisted.
+</ParamField>
+
+<ParamField body="password_confirmation" type="string" required>
+  Must exactly match the value provided in `password`. Used by Laravel's `confirmed` validation rule.
+</ParamField>
+
+## Request Example
+
+```bash
+curl -X POST http://localhost/api/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "password": "supersecret",
+    "password_confirmation": "supersecret"
+  }'
+```
+
+## Responses
+
+### 201 Created — Registration successful
+
+The user record was created successfully. No token is issued.
+
+```json
+{"status": "success", "message": "Registro exitoso"}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 201 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation message (`"Registro exitoso"`).
+</ResponseField>
+
+---
+
+### 422 Unprocessable Entity — Validation error
+
+Returned when any field fails validation. Common causes:
+
+- `email` is already registered to an existing account
+- `password` and `password_confirmation` do not match
+- `password` is shorter than 8 characters
+- A required field is missing or empty
+
+Laravel returns a standard validation error body with an `errors` object keyed by field name, e.g.:
+
+```json
+{
+  "message": "The email has already been taken.",
+  "errors": {
+    "email": ["The email has already been taken."]
+  }
+}
+```
+
+---
+
+<Note>
+  After registering, call `POST /api/login` with the same `email` and `password` to receive a bearer token. Registration alone does not create a session.
+</Note>

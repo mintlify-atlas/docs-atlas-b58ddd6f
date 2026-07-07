@@ -1,0 +1,200 @@
+---
+title: "Authenticate Requests to Smart Enviro Backend"
+sidebarTitle: "Authentication"
+description: "Smart Enviro Backend uses two independent auth systems: Laravel Sanctum Bearer tokens for mobile/web clients and device_token strings for ESP32 hardware. Learn how each works."
+---
+
+Smart Enviro Backend uses two completely separate authentication mechanisms depending on the caller. Mobile apps and web dashboards authenticate with **Laravel Sanctum Bearer tokens** — short-lived secrets tied to a user account and passed in the `Authorization` header. ESP32 microcontrollers authenticate with a **static `device_token`** string baked into the firmware at provisioning time and passed as a query parameter or request body field. These two systems never intersect: device tokens cannot call user-protected endpoints, and Sanctum tokens cannot be used to submit sensor data.
+
+---
+
+## Mobile/Web Client Authentication (Laravel Sanctum)
+
+### Obtaining a Token
+
+Send a `POST` request to `/api/login` with valid account credentials. On success the API creates a Sanctum personal access token, stores its plain-text value in `users.current_token`, and returns it in the response body. You must save this token securely on the client — it cannot be retrieved again after the response is consumed.
+
+```bash
+curl -X POST http://localhost/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "secret123"}'
+```
+
+**Success response (`200 OK`):**
+
+```json
+{
+  "status": "success",
+  "message": "Inicio de sesión exitoso",
+  "data": {
+    "user": {
+      "id": 1,
+      "name": "Jane Doe",
+      "email": "user@example.com"
+    },
+    "token": "1|abc123xyz..."
+  }
+}
+```
+
+### Single-Session Enforcement
+
+Smart Enviro Backend enforces **one active session per user account**. If a user is already logged in (i.e. `users.current_token` is non-null) and a second login attempt is made, the API returns `409 Conflict` without issuing a new token.
+
+```json
+{
+  "status": "error",
+  "message": "Cuenta en uso en otro dispositivo"
+}
+```
+
+The only way to unlock the account for a new login is to call `DELETE /api/logout` from the active session, which clears `current_token`.
+
+### Using the Token
+
+Pass the token as a Bearer credential in the `Authorization` header on every request to a protected endpoint:
+
+```bash
+curl -X GET http://localhost/api/my-devices \
+  -H "Authorization: Bearer 1|abc123..."
+```
+
+The `auth:sanctum` middleware validates the token, resolves the authenticated user, and makes that user available to the controller via `$request->user()`.
+
+### Revoking the Token (Logout)
+
+Call `DELETE /api/logout` while authenticated. The API deletes the current Sanctum access token record **and** sets `users.current_token` to `null`, immediately invalidating the session everywhere.
+
+```bash
+curl -X DELETE http://localhost/api/logout \
+  -H "Authorization: Bearer 1|abc123..."
+```
+
+**Success response (`200 OK`):**
+
+```json
+{
+  "status": "success",
+  "message": "Cierre de sesión exitoso"
+}
+```
+
+### Registration
+
+New accounts are created via `POST /api/register`. Registration does **not** issue a token — the user must subsequently call `/api/login` to obtain one.
+
+```bash
+curl -X POST http://localhost/api/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "email": "user@example.com",
+    "password": "secret123",
+    "password_confirmation": "secret123"
+  }'
+```
+
+**Success response (`201 Created`):**
+
+```json
+{
+  "status": "success",
+  "message": "Registro exitoso"
+}
+```
+
+---
+
+## Device Authentication (`device_token`)
+
+ESP32 devices do not use Sanctum. Each device is provisioned with a 64-character unique string stored in the `devices.device_token` column. The firmware presents this token on every API call.
+
+### How It Works
+
+<Steps>
+  <Step title="Provision the device">
+    At manufacturing or first setup, a `device_token` is generated (64 characters, unique across all devices) and written to the `devices` table. The same value is flashed into the firmware.
+  </Step>
+  <Step title="Sync on boot">
+    The device calls `GET /api/device/sync`, passing `device_token` as a **query parameter**. The API looks up the token, confirms the device is active, updates `last_seen_at` and `is_online`, and returns the current command and config properties.
+  </Step>
+  <Step title="Submit sensor readings">
+    At each measurement interval the device posts to `POST /api/sensor-data`, including `device_token` in the **request body** alongside the readings. The API resolves the device from the token and persists the data.
+  </Step>
+</Steps>
+
+### Sync Endpoint
+
+```bash
+curl -X GET "http://localhost/api/device/sync?device_token=your64chartoken"
+```
+
+If the token is invalid or the device is marked inactive (`is_active = false`), the API responds:
+
+```json
+{
+  "status": "error",
+  "command": "SLEEP"
+}
+```
+
+### Sensor Data Endpoint
+
+```bash
+curl -X POST http://localhost/api/sensor-data \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_token": "your64chartoken",
+    "readings": [
+      { "metric_key": "temp_amb", "value": 24.5 },
+      { "metric_key": "humedad_suelo", "value": 61.2 }
+    ]
+  }'
+```
+
+If the token is invalid or the device is inactive, the API responds:
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no autorizado o dado de baja"
+}
+```
+
+<Warning>
+  Never expose `device_token` values in client-side code, public repositories, or application logs. Each token grants the ability to push sensor readings and receive commands on behalf of the associated device. Treat them as secrets and rotate them if a device is compromised.
+</Warning>
+
+---
+
+## Public Endpoints (No Auth Required)
+
+These three endpoints are accessible without any token:
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| `POST` | `/api/login` | Authenticate a user and obtain a Sanctum Bearer token |
+| `POST` | `/api/register` | Create a new user account |
+| `GET` | `/api/device/sync` | ESP32 sync endpoint — device_token in query param |
+
+---
+
+## Protected Endpoints (Sanctum Bearer Token Required)
+
+All of the following endpoints require a valid `Authorization: Bearer {token}` header. Requests without a token or with an invalid/revoked token receive `401 Unauthorized`.
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| `GET` | `/api/user` | Return the currently authenticated user object |
+| `DELETE` | `/api/logout` | Revoke the current token and clear the active session |
+| `GET` | `/api/my-devices` | List all devices owned by the authenticated user |
+| `GET` | `/api/my-devices/{id}` | Get a single owned device with its properties |
+| `POST` | `/api/my-devices/{id}/toggle` | Toggle the device's `current_state` (ON/OFF/STANDBY) |
+| `PUT` | `/api/my-devices/{id}/properties` | Update one or more device properties (key-value config) |
+| `GET` | `/api/devices/available` | List unowned devices available to be claimed |
+| `POST` | `/api/devices/{id}/add` | Claim an available device and associate it with the user |
+| `GET` | `/api/sensor-data/history` | Query time-series sensor readings with filters |
+
+<Note>
+  `GET /api/user` is a single-line route closure defined at the top of `routes/api.php`. It returns the full authenticated `User` model object (with `password`, `remember_token`, and `current_token` excluded by the model's `#[Hidden]` attribute).
+</Note>

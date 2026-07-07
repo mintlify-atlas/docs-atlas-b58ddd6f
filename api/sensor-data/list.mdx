@@ -1,0 +1,135 @@
+---
+title: "GET /api/sensor-data — List Sensor Readings with Pagination"
+sidebarTitle: "GET /sensor-data"
+description: "GET /api/sensor-data — Returns paginated sensor readings (50 per page) ordered newest-first. Filter by device_id or sensor_type_id. Includes device name and sensor type details."
+---
+
+Returns a paginated list of all sensor readings, ordered from newest to oldest (50 per page). Supports optional filtering by device or sensor type. Each reading includes the device name and sensor type name and unit via eager-loaded relationships.
+
+## Endpoint
+
+**GET** `/api/sensor-data`
+
+**Auth:** None required. This is a public `apiResource` route.
+
+## Query Parameters
+
+<ParamField query="device_id" type="integer">
+  Filter readings to a specific device by its integer database ID. When omitted, readings from all devices are returned.
+</ParamField>
+
+<ParamField query="sensor_type_id" type="integer">
+  Filter readings to a specific sensor type by its integer database ID. When omitted, all sensor types are included in the results.
+</ParamField>
+
+<ParamField query="page" type="integer">
+  Page number for pagination. Defaults to `1`. Each page contains up to 50 records ordered by `recorded_at` descending.
+</ParamField>
+
+## Example Requests
+
+```bash
+# All readings (first page)
+curl -X GET http://localhost/api/sensor-data
+
+# Filter by device
+curl -X GET "http://localhost/api/sensor-data?device_id=3"
+
+# Filter by sensor type and device
+curl -X GET "http://localhost/api/sensor-data?device_id=3&sensor_type_id=2"
+```
+
+## Response
+
+### 200 OK
+
+Returns a standard Laravel paginated response envelope. The `data` array contains the reading records for the current page.
+
+```json
+{
+  "current_page": 1,
+  "data": [
+    {
+      "id": 42,
+      "device_id": 3,
+      "sensor_type_id": 2,
+      "reading_value": 73.5,
+      "recorded_at": "2024-01-15T10:30:00.000000Z",
+      "device": {"id": 3, "name": "Invernadero A"},
+      "sensor_type": {"id": 2, "name": "Humedad del suelo", "unit": "%"}
+    }
+  ],
+  "first_page_url": "http://localhost/api/sensor-data?page=1",
+  "from": 1,
+  "last_page": 5,
+  "last_page_url": "http://localhost/api/sensor-data?page=5",
+  "next_page_url": "http://localhost/api/sensor-data?page=2",
+  "path": "http://localhost/api/sensor-data",
+  "per_page": 50,
+  "prev_page_url": null,
+  "to": 50,
+  "total": 243
+}
+```
+
+<ResponseField name="current_page" type="integer">
+  The current page number being returned.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of sensor reading objects for the current page, ordered newest-first by `recorded_at`.
+
+  <Expandable title="data[] item fields">
+    <ResponseField name="data[].id" type="integer">
+      Primary key of the sensor reading record.
+    </ResponseField>
+
+    <ResponseField name="data[].device_id" type="integer">
+      Foreign key referencing the device that submitted the reading.
+    </ResponseField>
+
+    <ResponseField name="data[].sensor_type_id" type="integer">
+      Foreign key referencing the `sensor_types` record (integer ID).
+    </ResponseField>
+
+    <ResponseField name="data[].reading_value" type="number">
+      The stored sensor measurement, cast as a float.
+    </ResponseField>
+
+    <ResponseField name="data[].recorded_at" type="string">
+      ISO 8601 UTC timestamp of when the reading was recorded.
+    </ResponseField>
+
+    <ResponseField name="data[].device" type="object">
+      Eager-loaded device relationship. Contains only `id` and `name` fields.
+    </ResponseField>
+
+    <ResponseField name="data[].sensor_type" type="object">
+      Eager-loaded sensor type relationship. Contains `id`, `name`, and `unit` fields.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="per_page" type="integer">
+  Number of records per page. Fixed at `50`.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of records matching the applied filters across all pages.
+</ResponseField>
+
+<ResponseField name="last_page" type="integer">
+  The last available page number, calculated as `ceil(total / per_page)`.
+</ResponseField>
+
+<ResponseField name="next_page_url" type="string">
+  Full URL to the next page of results. `null` when on the last page.
+</ResponseField>
+
+<ResponseField name="prev_page_url" type="string">
+  Full URL to the previous page of results. `null` when on the first page.
+</ResponseField>
+
+<Note>
+  The `sensor_type_id` query parameter here expects the **integer database ID** (from the `sensor_types` table), not the `metric_key` string. The `POST /api/sensor-data` store endpoint is the exception where `metric_key` strings are accepted.
+</Note>

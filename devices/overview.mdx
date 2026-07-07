@@ -1,0 +1,95 @@
+---
+title: "Device Management in Smart Enviro Backend"
+sidebarTitle: "Overview"
+description: "Learn how devices are registered, discovered, claimed by users, and controlled through the Smart Enviro Backend API. Covers device lifecycle from provisioning to decommission."
+---
+
+A device in Smart Enviro Backend represents a physical ESP32 microcontroller registered in the database with a unique `mac_address` and `device_token`. Devices start unassigned — they have no `user_id` — and must be claimed by a user before they can be controlled. Once claimed, the owner has full control over the device's state and configuration.
+
+## Device Lifecycle
+
+<Steps>
+  <Step title="Provisioning">
+    An admin registers the ESP32's MAC address and generates a unique 64-character `device_token` in the database. The device receives this token via firmware configuration before it is deployed.
+  </Step>
+  <Step title="Boot & Sync">
+    On every power-up, the ESP32 calls `GET /api/device/sync` with its `device_token`. The backend verifies the token, confirms the device is active, and returns the current command (`ON`, `OFF`, or `STANDBY`) together with all stored configuration properties.
+  </Step>
+  <Step title="Discovery">
+    The ESP32 appears in `GET /api/devices/available` — the list of devices with no `user_id` that are active and waiting to be claimed. Authenticated mobile clients poll this endpoint to show a "nearby devices" list.
+  </Step>
+  <Step title="Claiming">
+    A user calls `POST /api/devices/{id}/add` to assign the device to their account. The backend sets `user_id` on the device record and creates a `DEVICE_ADDED` log entry in `device_logs`. After this step the device no longer appears in the available list.
+  </Step>
+  <Step title="Control">
+    The owner can toggle the actuator state via `POST /api/my-devices/{id}/toggle` (accepts `ON`, `OFF`, or `STANDBY`) and update configuration properties via `PUT /api/my-devices/{id}/properties`. Both endpoints are protected by Laravel Sanctum and enforce ownership.
+  </Step>
+  <Step title="Decommission">
+    Devices support soft-delete via the `deleted_at` column. A soft-deleted or inactive device (`is_active = false`) receives a `SLEEP` command on the next sync call, signalling the ESP32 to enter deep sleep mode and stop reporting.
+  </Step>
+</Steps>
+
+## Device States
+
+The `current_state` column is an enum with three possible values. It is set by the device owner through the toggle endpoint and returned to the ESP32 on every sync and sensor-data response.
+
+| State | Meaning |
+|---|---|
+| `ON` | Actuator is active (e.g. pump is running) |
+| `OFF` | Actuator is inactive |
+| `STANDBY` | Default idle state — device is online but not commanded; the ESP32 should evaluate its own automation logic |
+
+## Device Fields
+
+These columns are defined in the `devices` migration and are available on the `Device` model.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `bigint` | Auto-incrementing primary key |
+| `user_id` | `bigint` (nullable) | Foreign key to `users`; `null` until the device is claimed |
+| `mac_address` | `string(17)` | Unique hardware identifier, e.g. `AA:BB:CC:DD:EE:FF` |
+| `device_token` | `string(64)` | Unique secret used by the ESP32 to authenticate — never exposed to end users |
+| `name` | `string` | Human-readable label; defaults to `"Dispositivo Smart Enviro"` |
+| `type` | `string(50)` | Free-form device type string, e.g. `bomba`, `sensor_multi` |
+| `is_active` | `boolean` | Soft-disable flag; inactive devices receive `SLEEP` on sync |
+| `is_online` | `boolean` | Set to `true` automatically when the device pushes a sensor reading |
+| `current_state` | `enum` | One of `ON`, `OFF`, `STANDBY` |
+| `last_seen_at` | `timestamp` (nullable) | Updated every time the device successfully pushes sensor data |
+
+## Device Types
+
+The `type` field is a free-form string used by mobile clients and the web frontend to determine which UI components to render for a given device. The backend does not validate or restrict its value beyond a 50-character limit.
+
+<Tip>
+  Use consistent, lowercase snake_case type strings across firmware, backend seeds, and mobile app code. Agreed-upon values in the current project include `bomba` (pump actuator) and `sensor_multi` (multi-sensor node). Documenting these in a shared constant file prevents UI mismatches when new device types are introduced.
+</Tip>
+
+## Device Logs
+
+Every significant device event is recorded in the `device_logs` table. The `DeviceLog` model disables `updated_at` (logs are append-only), stores a `log_type`, a human-readable `message`, and an optional `payload` JSON object.
+
+Logs are created automatically by the API in two situations:
+
+| Trigger | `log_type` | Description |
+|---|---|---|
+| `POST /api/devices/{id}/add` | `DEVICE_ADDED` | Records which user claimed the device, including their `user_id` and email |
+| `PUT /api/my-devices/{id}/properties` | `COMMAND` | Records which property key was changed and stores `new_value` in the payload |
+
+Additional `log_type` values that can be written programmatically include `EVENT`, `INFO`, and `ERROR` for custom instrumentation.
+
+<CardGroup cols={2}>
+  <Card
+    title="ESP32 Integration"
+    icon="microchip"
+    href="devices/esp32-integration"
+  >
+    Step-by-step guide for connecting your ESP32 firmware to the backend — boot sync, sensor push, and actuator command handling.
+  </Card>
+  <Card
+    title="Device Properties"
+    icon="sliders"
+    href="devices/properties"
+  >
+    Full reference for the key-value property store: standard property keys, update API, and how properties flow back to the ESP32.
+  </Card>
+</CardGroup>

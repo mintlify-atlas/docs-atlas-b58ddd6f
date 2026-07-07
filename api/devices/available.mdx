@@ -1,0 +1,98 @@
+---
+title: "GET /api/devices/available — List Unclaimed Devices"
+sidebarTitle: "GET /available"
+description: "GET /api/devices/available — Returns all active devices with no assigned owner. Use this endpoint to discover ESP32 devices on the network before claiming them."
+---
+
+Returns all active devices that have not yet been assigned to any user (`user_id IS NULL`). Use this endpoint to populate a device discovery UI before calling `POST /api/devices/{id}/add` to claim a device.
+
+---
+
+## Endpoint
+
+| Field | Value |
+|---|---|
+| **Method** | GET |
+| **Path** | `/api/devices/available` |
+| **Auth** | Bearer token required (`Authorization: Bearer YOUR_TOKEN`) |
+
+---
+
+## Request
+
+No query parameters or request body.
+
+```bash
+curl -X GET http://localhost/api/devices/available \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Response (200 OK)
+
+```json
+{
+  "status": "success",
+  "message": "Dispositivos disponibles para agregar",
+  "data": [
+    {
+      "id": 5,
+      "device_token": "abc123...",
+      "name": "Dispositivo Smart Enviro",
+      "mac_address": "AA:BB:CC:DD:EE:FF",
+      "type": "sensor_multi",
+      "is_online": false,
+      "last_seen": null
+    }
+  ]
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  A human-readable label confirming the query returned available devices.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of unclaimed, active device objects.
+
+  <Expandable title="data[]">
+    <ResponseField name="data[].id" type="integer">
+      Unique device identifier. Pass this value to `POST /api/devices/{id}/add` to claim the device.
+    </ResponseField>
+
+    <ResponseField name="data[].device_token" type="string">
+      The device's 64-character authentication token. Displayed for reference; used by the ESP32 firmware.
+    </ResponseField>
+
+    <ResponseField name="data[].name" type="string">
+      Default display name provisioned with the device (e.g. `"Dispositivo Smart Enviro"`).
+    </ResponseField>
+
+    <ResponseField name="data[].mac_address" type="string">
+      The hardware MAC address of the ESP32 module (e.g. `"AA:BB:CC:DD:EE:FF"`).
+    </ResponseField>
+
+    <ResponseField name="data[].type" type="string">
+      Device type identifier (e.g. `"sensor_multi"`).
+    </ResponseField>
+
+    <ResponseField name="data[].is_online" type="boolean">
+      Whether the device has communicated with the backend recently. Typically `false` for newly provisioned devices.
+    </ResponseField>
+
+    <ResponseField name="data[].last_seen" type="string | null">
+      ISO 8601 timestamp of the last time the device contacted the backend (`last_seen_at`). `null` if the device has never synced.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+<Note>
+  Only active devices (`is_active = true`) with no owner appear in this list. Devices already assigned to other users, inactive devices, and soft-deleted devices are all excluded.
+</Note>

@@ -1,0 +1,103 @@
+---
+title: "POST /api/devices/{id}/add — Claim a Device to Your Account"
+sidebarTitle: "POST /add"
+description: "POST /api/devices/{id}/add — Assigns an unclaimed device to the authenticated user's account. Creates a DEVICE_ADDED log entry. Returns 201 with the device details."
+---
+
+Claims an available (unassigned) device and links it to the authenticated user's account. Once claimed, the device appears in `GET /api/my-devices` and only the owner can control it. A `DEVICE_ADDED` log entry is created containing the user's ID and email as the payload.
+
+---
+
+## Endpoint
+
+| Field | Value |
+|---|---|
+| **Method** | POST |
+| **Path** | `/api/devices/{id}/add` |
+| **Auth** | Bearer token required (`Authorization: Bearer YOUR_TOKEN`) |
+
+---
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique ID of the device to claim. Obtain this value from `GET /api/devices/available`. The device must be active and have no current owner.
+</ParamField>
+
+---
+
+## Request
+
+No request body is required.
+
+```bash
+curl -X POST http://localhost/api/devices/5/add \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## Responses
+
+### 201 Created
+
+The device was successfully claimed and linked to the authenticated user's account.
+
+```json
+{
+  "status": "success",
+  "message": "Dispositivo agregado a tu cuenta exitosamente",
+  "data": {
+    "id": 5,
+    "name": "Dispositivo Smart Enviro",
+    "device_token": "abc123...",
+    "type": "sensor_multi",
+    "is_online": false
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 201 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable confirmation that the device was added to the account.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Summary of the newly claimed device.
+
+  <Expandable title="data">
+    <ResponseField name="data.id" type="integer">
+      Unique device identifier.
+    </ResponseField>
+
+    <ResponseField name="data.name" type="string">
+      Display name of the device.
+    </ResponseField>
+
+    <ResponseField name="data.device_token" type="string">
+      The device's authentication token, used by the ESP32 firmware for `GET /api/device/sync`.
+    </ResponseField>
+
+    <ResponseField name="data.type" type="string">
+      Device type identifier (e.g. `"sensor_multi"`).
+    </ResponseField>
+
+    <ResponseField name="data.is_online" type="boolean">
+      Current online status of the device. Typically `false` immediately after claiming.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 404 Not Found
+
+The device with the given `id` is already claimed by another user, is inactive, has been soft-deleted, or does not exist.
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no disponible o ya asignado a otro usuario"
+}
+```

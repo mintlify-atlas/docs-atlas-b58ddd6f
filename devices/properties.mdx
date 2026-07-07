@@ -1,0 +1,159 @@
+---
+title: "Configure Device Properties in Smart Enviro Backend"
+sidebarTitle: "Properties"
+description: "Device properties are key-value pairs stored per-device that configure thresholds, automation behavior, and hardware capabilities reported to the ESP32 on each sync."
+---
+
+Device properties are a flexible key-value store (the `device_properties` table) that lets mobile clients configure per-device behavior without changing firmware. Each property has a `property_key` and `property_value` string, and the full set is returned to the ESP32 on every sync and sensor-data response. This means a user can change a threshold in the app and the device will act on it within one measurement cycle — no OTA update required.
+
+## Property Storage
+
+Properties live in the `device_properties` table with the following structure:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `bigint` | Auto-incrementing primary key |
+| `device_id` | `bigint` | Foreign key to `devices`; cascades on delete |
+| `property_key` | `string(100)` | Identifies the configuration knob, e.g. `humidity_threshold` |
+| `property_value` | `string` | The value, always stored as a string |
+
+**Key constraints and behavior:**
+
+- A unique constraint on `(device_id, property_key)` ensures exactly one value per key per device.
+- Use `PUT /api/my-devices/{id}/properties` to create or update a property. The backend performs an **upsert** (`updateOrCreate`) — if the key already exists it is updated in-place; if not, a new row is inserted.
+- Every successful property update automatically creates a `COMMAND` log entry in `device_logs` recording which key was changed and the new value.
+- All values are stored as plain strings. The API casts values to `boolean` or `int` as needed before returning them in `device_control` and capability responses.
+
+## Standard Property Keys
+
+The following property keys are recognized and consumed by the backend and firmware. Any other key is passed through to the ESP32 as-is in the `config` block.
+
+| Property Key | Value Type | Example Value | Description |
+|---|---|---|---|
+| `auto_water` | boolean string | `"true"` / `"false"` | Enable automatic watering based on the humidity threshold. When `true` and `current_state` is `STANDBY`, the ESP32 activates the pump autonomously. |
+| `humidity_threshold` | integer string | `"60"` | Humidity percentage below which `auto_water` triggers the pump. Defaults to `60` if not set. |
+| `has_pump` | boolean string | `"true"` / `"false"` | Declares whether the device has a pump actuator. Used by mobile clients to show or hide pump controls. |
+| `has_humidity` | boolean string | `"true"` / `"false"` | Declares whether the device has a humidity sensor. Used by mobile clients to show or hide humidity readings. |
+| `has_light` | boolean string | `"true"` / `"false"` | Declares whether the device has a light sensor. Exposed as `has_light_sensor` in the capabilities object. |
+| `dimmer_level` | integer string | `"75"` | Dimmer percentage for compatible actuators. Passed through to the ESP32 in the sync `config` block. |
+| `pump_duration` | integer string | `"10"` | Duration in seconds for a single pump activation cycle. |
+
+## Update a Property
+
+`PUT /api/my-devices/{id}/properties` requires a valid Sanctum token and ownership of the device. It accepts a single property update per request.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `property_key` | string | ✅ Yes | The property key to create or update |
+| `property_value` | string | ✅ Yes | The new value (always a string, even for booleans and integers) |
+
+```bash
+curl -X PUT http://localhost/api/my-devices/3/properties \
+  -H "Authorization: Bearer YOUR_SANCTUM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"property_key": "humidity_threshold", "property_value": "45"}'
+```
+
+**Successful response (200):**
+
+```json
+{
+  "status": "success",
+  "message": "Configuración guardada correctamente"
+}
+```
+
+**Error — device not found or not owned by the authenticated user (404):**
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no encontrado"
+}
+```
+
+<Note>
+  All property values are stored as strings. The API handles casting to boolean or `int` when building structured responses. When setting boolean properties from a mobile client, always send the string `"true"` or `"false"` — not the JSON literals `true` or `false`.
+</Note>
+
+## Properties in Device Responses
+
+Properties surface in three different shapes depending on the caller:
+
+<Accordion title="GET /api/my-devices and GET /api/my-devices/{id} — Mobile/Web clients">
+  The `UserDeviceController` reads properties and builds two typed objects:
+
+  **`capabilities`** — hardware feature flags cast to boolean:
+  ```json
+  {
+    "capabilities": {
+      "has_pump": true,
+      "has_humidity": true,
+      "has_light_sensor": false
+    }
+  }
+  ```
+
+  **`settings`** — automation configuration with proper types (only present on the single-device endpoint):
+  ```json
+  {
+    "settings": {
+      "auto_water": true,
+      "humidity_threshold": 45
+    }
+  }
+  ```
+</Accordion>
+
+<Accordion title="GET /api/device/sync — ESP32 firmware">
+  The `DeviceSyncController` returns the raw properties as a flat key→value map under the `config` key. All values remain strings, matching what was stored:
+
+  ```json
+  {
+    "status": "success",
+    "command": "STANDBY",
+    "config": {
+      "auto_water": "true",
+      "humidity_threshold": "45",
+      "has_pump": "true",
+      "dimmer_level": "75",
+      "pump_duration": "10"
+    }
+  }
+  ```
+
+  The firmware is responsible for parsing the string values to the appropriate native types.
+</Accordion>
+
+<Accordion title="POST /api/sensor-data response — ESP32 firmware">
+  The `SensorDataController` injects a `device_control` block with pre-cast values so the ESP32 can act immediately without string parsing:
+
+  ```json
+  {
+    "device_control": {
+      "current_state": "STANDBY",
+      "auto_water": true,
+      "humidity_threshold": 45
+    }
+  }
+  ```
+</Accordion>
+
+<CardGroup cols={2}>
+  <Card
+    title="ESP32 Integration"
+    icon="microchip"
+    href="devices/esp32-integration"
+  >
+    See how the ESP32 consumes the sync config and device_control blocks in practice.
+  </Card>
+  <Card
+    title="Device Overview"
+    icon="server"
+    href="devices/overview"
+  >
+    Review the full device lifecycle and the device_logs entries created by property updates.
+  </Card>
+</CardGroup>

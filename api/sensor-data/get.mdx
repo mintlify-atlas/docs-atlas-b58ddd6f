@@ -1,0 +1,92 @@
+---
+title: "GET /api/sensor-data/{id} — Retrieve a Single Sensor Reading"
+sidebarTitle: "GET /sensor-data/{id}"
+description: "GET /api/sensor-data/{id} — Returns a single sensor reading by ID, including the associated device name and sensor type details (name and unit)."
+---
+
+Returns the full detail of a single sensor reading by its database ID. The response includes eager-loaded device name and sensor type details (name and measurement unit).
+
+## Endpoint
+
+**GET** `/api/sensor-data/{id}`
+
+**Auth:** None required. This is a public `apiResource` route.
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric primary key of the sensor reading to retrieve. Must correspond to an existing record in the `sensor_data` table.
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X GET http://localhost/api/sensor-data/42
+```
+
+## Responses
+
+### 200 OK
+
+The reading was found. Returns the full record with eager-loaded `device` and `sensor_type` relationships.
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": 42,
+    "device_id": 3,
+    "sensor_type_id": 2,
+    "reading_value": 73.5,
+    "recorded_at": "2024-01-15T10:30:00.000000Z",
+    "device": {"id": 3, "name": "Invernadero A"},
+    "sensor_type": {"id": 2, "name": "Humedad del suelo", "unit": "%"}
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  The full sensor reading record.
+
+  <Expandable title="data fields">
+    <ResponseField name="data.id" type="integer">
+      Primary key of the sensor reading record.
+    </ResponseField>
+
+    <ResponseField name="data.device_id" type="integer">
+      Foreign key referencing the device that submitted the reading.
+    </ResponseField>
+
+    <ResponseField name="data.sensor_type_id" type="integer">
+      Foreign key referencing the `sensor_types` record (integer ID).
+    </ResponseField>
+
+    <ResponseField name="data.reading_value" type="number">
+      The stored sensor measurement, cast as a float. Stored internally as `DECIMAL(10,4)`.
+    </ResponseField>
+
+    <ResponseField name="data.recorded_at" type="string">
+      ISO 8601 UTC timestamp of when the reading was recorded.
+    </ResponseField>
+
+    <ResponseField name="data.device" type="object">
+      Eager-loaded device relationship. Contains only `id` and `name` fields (e.g. `{"id": 3, "name": "Invernadero A"}`).
+    </ResponseField>
+
+    <ResponseField name="data.sensor_type" type="object">
+      Eager-loaded sensor type relationship. Contains `id`, `name`, and `unit` fields (e.g. `{"id": 2, "name": "Humedad del suelo", "unit": "%"}`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 404 Not Found
+
+No sensor reading with the given `id` exists in the database.
+
+```json
+{"status": "error", "message": "Lectura no encontrada"}
+```

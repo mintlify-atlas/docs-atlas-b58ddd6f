@@ -1,0 +1,178 @@
+---
+title: "Smart Enviro Backend Database Schema and Data Model"
+sidebarTitle: "Data Model"
+description: "Complete schema reference for Smart Enviro Backend: users, devices, device_properties, sensor_types, sensor_data, and device_logs tables with relationships and index strategy."
+---
+
+Smart Enviro Backend persists all of its state across six MySQL tables. Users own devices — a single `user_id` foreign key ties each device to its owner, and that key is set to `NULL` when the user is deleted rather than cascading the delete, so orphaned devices remain available for re-adoption. Devices in turn own three dependent record types: key-value configuration pairs (`device_properties`), time-series telemetry readings (`sensor_data`), and an append-only activity journal (`device_logs`). Sensor readings are further categorised through a shared `sensor_types` lookup table that defines the name, machine-readable metric key, and unit of measure for each observable quantity.
+
+---
+
+## Table Reference
+
+### `users`
+
+The standard Laravel 11 users table extended with a `current_token` column to enforce single-session semantics. The `password` and `remember_token` columns are hidden from serialisation by the `#[Hidden]` model attribute; `current_token` is similarly hidden.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `name` | `varchar(255)` | NOT NULL | User's display name |
+| `email` | `varchar(255)` | NOT NULL, UNIQUE | Login identifier |
+| `email_verified_at` | `timestamp` | Nullable | Set when email is verified |
+| `password` | `varchar(255)` | NOT NULL | Bcrypt hash; hidden from API output |
+| `current_token` | `varchar(255)` | Nullable | Active Sanctum plain-text token |
+| `remember_token` | `varchar(100)` | Nullable | Laravel remember-me token |
+| `created_at` | `timestamp` | Nullable | — |
+| `updated_at` | `timestamp` | Nullable | — |
+
+<Note>
+  `current_token` is the cornerstone of single-session enforcement. When it is non-null, any new login attempt for the same account returns `409 Conflict`. See [Authentication](/concepts/authentication) for the full flow.
+</Note>
+
+---
+
+### `devices`
+
+Represents a physical ESP32 unit. Devices can exist without an owner (`user_id` is nullable) — this is the "available" state, visible through `GET /api/devices/available`. Soft deletes are enabled via the `SoftDeletes` trait, so deleted rows remain in the table with `deleted_at` set.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `user_id` | `bigint unsigned` | Nullable, FK → `users.id`, `nullOnDelete` | Set to NULL when owner is deleted |
+| `mac_address` | `varchar(17)` | NOT NULL, UNIQUE | Hardware MAC address |
+| `device_token` | `varchar(64)` | NOT NULL, UNIQUE | Secret used by the ESP32 for auth |
+| `name` | `varchar(255)` | NOT NULL, DEFAULT `'Dispositivo Smart Enviro'` | Human-readable label |
+| `type` | `varchar(50)` | NOT NULL | e.g. `bomba`, `sensor_multi` |
+| `is_active` | `tinyint(1)` | NOT NULL, DEFAULT `1` | Whether the device is enabled |
+| `is_online` | `tinyint(1)` | NOT NULL, DEFAULT `0` | Updated on each sync call |
+| `current_state` | `enum('ON','OFF','STANDBY')` | NOT NULL, DEFAULT `'STANDBY'` | Last commanded state |
+| `last_seen_at` | `timestamp` | Nullable | Set on every successful sync |
+| `deleted_at` | `timestamp` | Nullable | Soft-delete timestamp |
+| `created_at` | `timestamp` | Nullable | — |
+| `updated_at` | `timestamp` | Nullable | — |
+
+<Tip>
+  Because `user_id` uses `nullOnDelete` rather than `cascadeOnDelete`, deregistering a user account does not wipe the physical hardware's record. The device reverts to "available" status and can be claimed by a new user.
+</Tip>
+
+---
+
+### `device_properties`
+
+A flexible key-value store for per-device configuration. Each row pairs a `property_key` string (e.g. `humidity_threshold`, `auto_water`, `has_pump`) with a `property_value` string. The composite unique constraint on `(device_id, property_key)` ensures a device cannot have duplicate keys — an upsert pattern is used when updating.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `device_id` | `bigint unsigned` | NOT NULL, FK → `devices.id`, `cascadeOnDelete` | Deleted with the device |
+| `property_key` | `varchar(100)` | NOT NULL | e.g. `humidity_threshold`, `auto_water` |
+| `property_value` | `varchar(255)` | NOT NULL | String-serialised value |
+| `created_at` | `timestamp` | Nullable | — |
+| `updated_at` | `timestamp` | Nullable | — |
+
+**Unique constraint:** `(device_id, property_key)`
+
+<Note>
+  All property values are stored as strings. Numeric thresholds, booleans, and other typed values must be cast on read by the consuming client or the device firmware.
+</Note>
+
+---
+
+### `sensor_types`
+
+A seed/lookup table that defines the catalogue of measurable quantities the system recognises. The `metric_key` is the machine-readable identifier that ESP32 firmware and API clients use when referencing a measurement type.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `name` | `varchar(255)` | NOT NULL, UNIQUE | Human-readable name, e.g. `Temperatura ambiente` |
+| `metric_key` | `varchar(50)` | NOT NULL, UNIQUE | Machine key, e.g. `temp_amb`, `humedad_suelo` |
+| `unit` | `varchar(20)` | NOT NULL | Display unit, e.g. `°C`, `%` |
+| `created_at` | `timestamp` | Nullable | — |
+| `updated_at` | `timestamp` | Nullable | — |
+
+---
+
+### `sensor_data`
+
+The primary time-series telemetry table. It deliberately omits `created_at` and `updated_at` (Laravel's `$timestamps = false`) to reduce write overhead — `recorded_at` serves as the sole temporal column and defaults to the current timestamp at insert time.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `device_id` | `bigint unsigned` | NOT NULL, FK → `devices.id`, `cascadeOnDelete` | Cascade-deleted with the device |
+| `sensor_type_id` | `bigint unsigned` | NOT NULL, FK → `sensor_types.id`, `restrictOnDelete` | Cannot delete a sensor type while readings reference it |
+| `reading_value` | `decimal(10, 4)` | NOT NULL | Four decimal places of precision |
+| `recorded_at` | `timestamp` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP` | Time of measurement |
+
+**Composite indexes:**
+
+| Index | Columns | Purpose |
+|-------|---------|---------|
+| `sensor_data_device_id_recorded_at_index` | `(device_id, recorded_at)` | Time-range queries per device |
+| `sensor_data_sensor_type_id_recorded_at_index` | `(sensor_type_id, recorded_at)` | Time-range queries per metric type |
+
+<Note>
+  The `restrictOnDelete` constraint on `sensor_type_id` prevents accidental deletion of a sensor type that still has associated readings. Prune all related `sensor_data` rows before removing a `sensor_types` record.
+</Note>
+
+---
+
+### `device_logs`
+
+An append-only audit and event log. The `UPDATED_AT` constant is set to `null` in the `DeviceLog` model, so Laravel never attempts to write an `updated_at` column. Only `created_at` is tracked, and it defaults to the current timestamp.
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | `bigint unsigned` | PK, auto-increment | — |
+| `device_id` | `bigint unsigned` | NOT NULL, FK → `devices.id`, `cascadeOnDelete` | Deleted with the device |
+| `log_type` | `varchar(255)` | NOT NULL, DEFAULT `'INFO'` | One of: `EVENT`, `ERROR`, `INFO`, `COMMAND` |
+| `message` | `text` | NOT NULL | Human-readable log message |
+| `payload` | `json` | Nullable | Arbitrary structured context; cast to `array` by the model |
+| `created_at` | `timestamp` | NOT NULL, DEFAULT `CURRENT_TIMESTAMP` | Append time |
+
+<Tip>
+  The `payload` JSON column is automatically decoded to a PHP array when accessed via the `DeviceLog` Eloquent model, thanks to the `'payload' => 'array'` cast. Store any structured diagnostic data (sensor snapshots, command parameters, error codes) here rather than serialising into `message`.
+</Tip>
+
+---
+
+## Relationships Diagram
+
+The following Eloquent relationships are defined across the model layer:
+
+<Accordion title="User ↔ Device">
+  - `User` **hasMany** `Device` — a user can own many devices.
+  - `Device` **belongsTo** `User` — each device has at most one owner (nullable).
+</Accordion>
+
+<Accordion title="Device ↔ DeviceProperty">
+  - `Device` **hasMany** `DeviceProperty` — a device can have many key-value properties.
+  - `DeviceProperty` **belongsTo** `Device`.
+</Accordion>
+
+<Accordion title="Device ↔ SensorData">
+  - `Device` **hasMany** `SensorData` — a device generates many sensor readings over time.
+  - `SensorData` **belongsTo** `Device`.
+</Accordion>
+
+<Accordion title="Device ↔ DeviceLog">
+  - `Device` **hasMany** `DeviceLog` — a device accumulates many log entries.
+  - `DeviceLog` **belongsTo** `Device`.
+</Accordion>
+
+<Accordion title="SensorType ↔ SensorData">
+  - `SensorType` **hasMany** `SensorData` — one measurement type (e.g. `temp_amb`) categorises many individual readings.
+  - `SensorData` **belongsTo** `SensorType`.
+</Accordion>
+
+Here is a concise summary of all relationships:
+
+```
+User
+ └── hasMany ──► Device
+                  ├── hasMany ──► DeviceProperty
+                  ├── hasMany ──► SensorData ──► belongsTo ──► SensorType
+                  └── hasMany ──► DeviceLog
+```

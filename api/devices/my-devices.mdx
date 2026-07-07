@@ -1,0 +1,231 @@
+---
+title: "GET /api/my-devices — List Authenticated User's Devices"
+sidebarTitle: "GET /api/my-devices"
+description: "GET /api/my-devices — Returns all devices owned by the authenticated user, with online status, current state, capabilities, and latest humidity reading."
+---
+
+Returns a list of all devices assigned to the authenticated user. Each device includes online status, current actuator state, hardware capability flags derived from device properties, and the latest humidity reading (sensor\_type\_id=1).
+
+---
+
+## GET /api/my-devices
+
+Returns every device owned by the authenticated user. Device properties stored in the database (e.g. `has_pump`, `has_humidity`, `has_light`) are resolved into a structured `capabilities` object. The `last_humidity` value is taken from the most recent `SensorData` row where `sensor_type_id = 1`.
+
+| Field | Value |
+|---|---|
+| **Method** | GET |
+| **Path** | `/api/my-devices` |
+| **Auth** | Bearer token required (`Authorization: Bearer YOUR_TOKEN`) |
+
+### Request
+
+No query parameters or request body.
+
+```bash
+curl -X GET http://localhost/api/my-devices \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Response (200 OK)
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 1,
+      "name": "Invernadero A",
+      "is_online": true,
+      "current_state": "STANDBY",
+      "capabilities": {
+        "has_pump": true,
+        "has_humidity": true,
+        "has_light_sensor": false
+      },
+      "last_humidity": 73.5
+    }
+  ]
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` for a 200 response.
+</ResponseField>
+
+<ResponseField name="data" type="array">
+  Array of device objects belonging to the authenticated user.
+
+  <Expandable title="data[]">
+    <ResponseField name="data[].id" type="integer">
+      Unique device identifier.
+    </ResponseField>
+
+    <ResponseField name="data[].name" type="string">
+      Human-readable display name of the device (e.g. `"Invernadero A"`).
+    </ResponseField>
+
+    <ResponseField name="data[].is_online" type="boolean">
+      Whether the device has communicated with the backend recently.
+    </ResponseField>
+
+    <ResponseField name="data[].current_state" type="string">
+      The current actuator command. One of: `ON`, `OFF`, `STANDBY`.
+    </ResponseField>
+
+    <ResponseField name="data[].capabilities" type="object">
+      Hardware capability flags derived from `device_properties`.
+
+      <Expandable title="capabilities">
+        <ResponseField name="has_pump" type="boolean">
+          `true` if the device has a pump actuator (`has_pump` property = `"true"`).
+        </ResponseField>
+
+        <ResponseField name="has_humidity" type="boolean">
+          `true` if the device has a soil humidity sensor (`has_humidity` property = `"true"`).
+        </ResponseField>
+
+        <ResponseField name="has_light_sensor" type="boolean">
+          `true` if the device has a light sensor (`has_light` property = `"true"`).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="data[].last_humidity" type="number | null">
+      The most recent `reading_value` where `sensor_type_id = 1`. Returns `null` if no readings exist yet.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## GET /api/my-devices/{id}
+
+Returns detailed information about a single device owned by the authenticated user. The response includes the device's current settings, capability flags, and up to 20 recent sensor history entries.
+
+| Field | Value |
+|---|---|
+| **Method** | GET |
+| **Path** | `/api/my-devices/{id}` |
+| **Auth** | Bearer token required |
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The unique ID of the device to retrieve. The device must belong to the authenticated user.
+</ParamField>
+
+### Request
+
+```bash
+curl -X GET http://localhost/api/my-devices/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Response (200 OK)
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": 1,
+    "name": "Invernadero A",
+    "is_online": true,
+    "state": "STANDBY",
+    "settings": {
+      "auto_water": false,
+      "humidity_threshold": 40
+    },
+    "capabilities": {
+      "has_pump": true,
+      "has_humidity": true
+    },
+    "history": [
+      {"value": 73.5, "type": "humedad_suelo", "date": "2024-01-15T10:30:00.000000Z"}
+    ]
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` for a 200 response.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Detailed device object.
+
+  <Expandable title="data">
+    <ResponseField name="data.id" type="integer">
+      Unique device identifier.
+    </ResponseField>
+
+    <ResponseField name="data.name" type="string">
+      Human-readable display name.
+    </ResponseField>
+
+    <ResponseField name="data.is_online" type="boolean">
+      Whether the device is currently online.
+    </ResponseField>
+
+    <ResponseField name="data.state" type="string">
+      Current actuator command: `ON`, `OFF`, or `STANDBY`.
+    </ResponseField>
+
+    <ResponseField name="data.settings" type="object">
+      Automation configuration resolved from `device_properties`.
+
+      <Expandable title="settings">
+        <ResponseField name="auto_water" type="boolean">
+          Whether automatic watering is enabled. Defaults to `false`.
+        </ResponseField>
+
+        <ResponseField name="humidity_threshold" type="integer">
+          Humidity percentage at which the pump triggers. Defaults to `40`.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="data.capabilities" type="object">
+      Hardware capability flags.
+
+      <Expandable title="capabilities">
+        <ResponseField name="has_pump" type="boolean">
+          `true` if a pump actuator is configured.
+        </ResponseField>
+
+        <ResponseField name="has_humidity" type="boolean">
+          `true` if a humidity sensor is configured.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="data.history" type="array">
+      Up to 20 most recent sensor readings for this device. Each entry includes the raw value, the sensor metric key, and the timestamp.
+
+      <Expandable title="history[]">
+        <ResponseField name="value" type="number">
+          The sensor reading value.
+        </ResponseField>
+
+        <ResponseField name="type" type="string">
+          The metric key from the associated `SensorType` (e.g. `"humedad_suelo"`).
+        </ResponseField>
+
+        <ResponseField name="date" type="string">
+          ISO 8601 timestamp when the reading was recorded.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response (404 Not Found)
+
+Returned when no device with the given `id` belongs to the authenticated user.
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no encontrado"
+}
+```

@@ -1,0 +1,63 @@
+---
+title: "DELETE /api/sensor-data/{id} — Permanently Delete a Reading"
+sidebarTitle: "DELETE /sensor-data/{id}"
+description: "DELETE /api/sensor-data/{id} — Permanently removes a sensor reading from the database. Intended for admin use to correct data errors or remove stale entries."
+---
+
+Permanently deletes a sensor reading by ID. This is a hard delete — the record is removed from the `sensor_data` table and cannot be recovered. Intended for administrative use to correct data entry errors or clean up stale readings.
+
+## Endpoint
+
+**DELETE** `/api/sensor-data/{id}`
+
+**Auth:** None required per route configuration. This is part of the public `apiResource` registration.
+
+<Warning>
+  This is a **permanent, hard delete**. Deleted sensor readings cannot be recovered. There is no soft-delete or archival mechanism on the `sensor_data` model. Use with caution — prefer archival strategies over deletion in production environments where historical data integrity is important.
+</Warning>
+
+## Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The numeric primary key of the sensor reading to permanently delete. Must correspond to an existing record in the `sensor_data` table.
+</ParamField>
+
+## Example Request
+
+```bash
+curl -X DELETE http://localhost/api/sensor-data/42
+```
+
+## Responses
+
+### 200 OK
+
+The reading was found and permanently removed from the database.
+
+```json
+{"status": "success", "message": "Lectura eliminada permanentemente"}
+```
+
+<ResponseField name="status" type="string">
+  Always `"success"` on a 200 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message: `"Lectura eliminada permanentemente"`.
+</ResponseField>
+
+### 404 Not Found
+
+No sensor reading with the given `id` exists in the database.
+
+```json
+{"status": "error", "message": "Lectura no encontrada"}
+```
+
+<ResponseField name="status" type="string">
+  Always `"error"` on a 404 response.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message: `"Lectura no encontrada"`.
+</ResponseField>

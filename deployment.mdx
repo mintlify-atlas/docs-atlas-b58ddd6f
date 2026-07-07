@@ -1,0 +1,199 @@
+---
+title: "Deploy Smart Enviro Backend with Docker"
+sidebarTitle: "Deployment"
+description: "Deploy Smart Enviro Backend to production using the included Dockerfile with PHP 8.4 Apache, MySQL 8, and Redis. Configure environment variables for your target environment."
+---
+
+Smart Enviro Backend ships with a production-ready `Dockerfile` based on the official `php:8.4-apache` image. The build installs all system-level dependencies, compiles the PHP extensions required by Laravel (`pdo_mysql`, `mbstring`, `exif`, `pcntl`, `bcmath`, `gd`), enables Apache's `mod_rewrite` module for clean URL routing, and sets the Apache document root to Laravel's `public/` directory. Composer dependencies are installed without dev packages using `--no-dev --optimize-autoloader`, and storage directories are pre-configured with the correct `www-data` ownership and `775` permissions.
+
+## Environment Variables
+
+Configure your `.env` (or equivalent secrets manager) with the following variables before starting any container.
+
+### App
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `APP_NAME` | `Laravel` | Human-readable application name. |
+| `APP_ENV` | `local` | Set to `production` in live deployments. |
+| `APP_KEY` | *(empty)* | Base-64 encryption key — generate with `artisan key:generate`. |
+| `APP_DEBUG` | `true` | Set to `false` in production to suppress stack traces. |
+| `APP_URL` | `http://localhost` | Publicly accessible base URL of the API. |
+
+### Database
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `DB_CONNECTION` | `sqlite` | Set to `mysql` when using the MySQL container. |
+| `DB_HOST` | `127.0.0.1` | Hostname of the MySQL service (e.g. `mysql` inside Sail). |
+| `DB_PORT` | `3306` | MySQL port. |
+| `DB_DATABASE` | `laravel` | Name of the target database. |
+| `DB_USERNAME` | `root` | MySQL user. |
+| `DB_PASSWORD` | *(empty)* | MySQL password. |
+
+### Redis
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `REDIS_CLIENT` | `phpredis` | PHP Redis driver — `phpredis` or `predis`. |
+| `REDIS_HOST` | `127.0.0.1` | Hostname of the Redis service (e.g. `redis` inside Sail). |
+| `REDIS_PASSWORD` | `null` | Redis `AUTH` password; `null` disables authentication. |
+| `REDIS_PORT` | `6379` | Redis port. |
+
+### Cache / Queue / Session
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `CACHE_STORE` | `database` | Cache backend — switch to `redis` for better performance. |
+| `QUEUE_CONNECTION` | `database` | Queue driver — switch to `redis` for a dedicated queue. |
+| `SESSION_DRIVER` | `database` | Session storage backend. |
+
+### Mail
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `MAIL_MAILER` | `log` | Mail transport — `log` writes to Laravel logs, use `smtp` in production. |
+| `MAIL_HOST` | `127.0.0.1` | SMTP server hostname. |
+| `MAIL_PORT` | `2525` | SMTP port. |
+| `MAIL_USERNAME` | `null` | SMTP authentication username. |
+| `MAIL_PASSWORD` | `null` | SMTP authentication password. |
+
+## Laravel Sail (Development)
+
+Laravel Sail orchestrates the app, MySQL 8.4, and Redis Alpine containers via Docker Compose. It is the recommended workflow for local development and staging environments.
+
+<Steps>
+  <Step title="Configure environment variables">
+    Copy `.env.example` to `.env` and update the database and Redis credentials:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    At minimum, set `DB_CONNECTION=mysql` and uncomment and fill in `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`.
+  </Step>
+
+  <Step title="Start all services">
+    ```bash
+    ./vendor/bin/sail up -d
+    ```
+
+    Sail starts three containers in the background. Services are exposed on the following host ports:
+
+    | Service | Environment variable | Default port |
+    | :--- | :--- | :--- |
+    | Laravel app | `APP_PORT` | `80` |
+    | MySQL 8.4 | `FORWARD_DB_PORT` | `3306` |
+    | Redis Alpine | `FORWARD_REDIS_PORT` | `6379` |
+
+    Override any port by setting the corresponding variable in `.env` before running `sail up`.
+  </Step>
+
+  <Step title="Generate the application key">
+    ```bash
+    ./vendor/bin/sail artisan key:generate
+    ```
+  </Step>
+
+  <Step title="Run database migrations">
+    ```bash
+    ./vendor/bin/sail artisan migrate
+    ```
+  </Step>
+
+  <Step title="Verify health">
+    ```bash
+    ./vendor/bin/sail ps
+    ```
+
+    All three services should show a **healthy** status. If the MySQL container is still initialising, wait a few seconds and try again.
+  </Step>
+</Steps>
+
+## Production Docker Build
+
+Use the included `Dockerfile` to build a self-contained image suitable for any container platform (Docker Engine, ECS, Cloud Run, Fly.io, etc.).
+
+**Build the image:**
+
+```bash
+docker build -t smart-enviro-backend .
+```
+
+**Run the container:**
+
+```bash
+docker run -d -p 80:80 --env-file .env smart-enviro-backend
+```
+
+<Note>
+  The `Dockerfile` does **not** run `artisan migrate` automatically. After starting the container, run migrations against your target database:
+
+  ```bash
+  docker exec <container_id> php artisan migrate --force
+  ```
+
+  In orchestrated environments (Kubernetes, ECS) this is best handled as an init container or a one-off task before the main container starts receiving traffic.
+</Note>
+
+## Post-Deploy Checklist
+
+<Steps>
+  <Step title="Set production environment flags">
+    Ensure the following values are set in your production `.env` or secrets manager:
+
+    ```bash
+    APP_ENV=production
+    APP_DEBUG=false
+    ```
+
+    `APP_DEBUG=false` prevents sensitive stack traces and configuration details from leaking in API error responses.
+  </Step>
+
+  <Step title="Run database migrations">
+    ```bash
+    php artisan migrate --force
+    ```
+
+    The `--force` flag is required to bypass the interactive prompt that Laravel shows when running migrations in production.
+  </Step>
+
+  <Step title="Set storage permissions">
+    The `Dockerfile` pre-sets permissions for `storage/` and `bootstrap/cache/`, but if you mount a volume over these directories in production you may need to re-apply:
+
+    ```bash
+    chown -R www-data:www-data storage bootstrap/cache
+    chmod -R 775 storage bootstrap/cache
+    ```
+  </Step>
+
+  <Step title="Configure a queue worker">
+    If you switch `QUEUE_CONNECTION` to `redis`, start a queue worker to process background jobs:
+
+    ```bash
+    php artisan queue:work --tries=3
+    ```
+
+    In production, manage this process with a supervisor such as Supervisor, systemd, or a sidecar container.
+  </Step>
+</Steps>
+
+## Code Quality
+
+Run the following commands before building a production image to ensure the codebase is correctly formatted and all tests pass.
+
+**Auto-format with Laravel Pint:**
+
+```bash
+./vendor/bin/sail artisan pint
+```
+
+Pint reformats PHP files to the project's configured style rules. Commit any resulting changes before pushing.
+
+**Run the Pest test suite:**
+
+```bash
+./vendor/bin/sail artisan test
+```
+
+All Feature and Unit tests must pass before a build is promoted to production. A failed test in CI should block the deployment pipeline.

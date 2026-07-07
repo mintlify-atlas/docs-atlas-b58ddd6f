@@ -1,0 +1,172 @@
+---
+title: "Integrate ESP32 Hardware with Smart Enviro Backend"
+sidebarTitle: "ESP32 Integration"
+description: "Step-by-step guide for connecting ESP32 microcontrollers to Smart Enviro Backend: boot sync, sensor data push, actuator command handling, and recommended polling intervals."
+---
+
+Smart Enviro Backend is designed for bidirectional communication with ESP32 microcontrollers. The device authenticates using a `device_token` (not a user token), syncs its configuration on boot, and pushes sensor readings in exchange for actuator control instructions. No user credentials are ever stored on the hardware.
+
+## Step 1: Sync on Boot
+
+On every power-up — and periodically thereafter (recommended: every 5 minutes) — the ESP32 calls `GET /api/device/sync` to receive its current command and full configuration. This endpoint is **public** (no Sanctum token required); the `device_token` alone authenticates the device.
+
+**Request — query parameter:**
+
+| Parameter | Required | Description |
+|---|---|---|
+| `device_token` | ✅ Yes | The 64-character token provisioned into the device firmware |
+
+```bash
+curl -X GET "http://your-server/api/device/sync?device_token=YOUR_DEVICE_TOKEN"
+```
+
+**Successful response (200):**
+
+```json
+{
+  "status": "success",
+  "command": "STANDBY",
+  "config": {
+    "dimmer_level": "75",
+    "humidity_threshold": "60",
+    "auto_water": "true"
+  }
+}
+```
+
+The `command` field maps directly to `devices.current_state`. The `config` object is a flat key→value map of every property stored for this device in `device_properties`.
+
+**Error response — invalid or inactive device (401):**
+
+```json
+{
+  "status": "error",
+  "command": "SLEEP"
+}
+```
+
+<Note>
+  When the response `command` is `SLEEP`, the ESP32 should enter deep sleep mode immediately to conserve power. This response is returned whenever the device token is not found in the database or the device has `is_active = false`.
+</Note>
+
+---
+
+## Step 2: Push Sensor Readings
+
+After a successful sync, the ESP32 sends sensor readings using `POST /api/sensor-data`. This endpoint is also **public** and authenticates via `device_token`. The backend verifies the token, resolves the sensor type by `metric_key`, stores the reading, marks the device online, and returns the latest `device_control` block — all in a single call.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `device_token` | string | ✅ Yes | 64-character device authentication token |
+| `sensor_type_id` | string | ✅ Yes | The `metric_key` string for this reading, e.g. `humedad_suelo` |
+| `value` | numeric | ✅ Yes | The raw sensor reading |
+
+```json
+{
+  "device_token": "YOUR_64_CHAR_TOKEN",
+  "sensor_type_id": "humedad_suelo",
+  "value": 73.5
+}
+```
+
+**What the backend does with this request:**
+
+1. Looks up the device by `device_token` and confirms `is_active = true`
+2. Resolves the `SensorType` record by matching `metric_key` against `sensor_type_id`
+3. Creates a new `SensorData` record with `device_id`, `sensor_type_id`, and `reading_value`
+4. Updates `device.is_online = true` and `device.last_seen_at = now()`
+5. Reads all `device_properties` for this device and builds the `device_control` response block
+
+**Successful response (201):**
+
+```json
+{
+  "status": "success",
+  "message": "Lectura guardada correctamente",
+  "data": {
+    "id": 42,
+    "device_id": 3,
+    "sensor_type_id": 2,
+    "reading_value": 73.5,
+    "recorded_at": "2024-01-15T10:30:00.000000Z"
+  },
+  "device_control": {
+    "current_state": "ON",
+    "auto_water": true,
+    "humidity_threshold": 60
+  }
+}
+```
+
+**Error — unrecognised device (401):**
+
+```json
+{
+  "status": "error",
+  "message": "Dispositivo no autorizado o dado de baja"
+}
+```
+
+**Error — unregistered sensor type (404):**
+
+```json
+{
+  "status": "error",
+  "message": "Tipo de sensor 'humedad_suelo' no está registrado"
+}
+```
+
+<Tip>
+  The ESP32 should read `device_control.current_state` and `device_control.auto_water` from every sensor data response to keep actuator state up to date without making a separate sync call. This halves the number of HTTP round-trips during normal operation.
+</Tip>
+
+---
+
+## Step 3: Act on Commands
+
+Once the ESP32 has a `device_control` block (from either sync or a sensor-data response), it should apply the following logic:
+
+| `current_state` | `auto_water` | Recommended ESP32 Behavior |
+|---|---|---|
+| `ON` | any | Activate actuator immediately (e.g. turn pump on) |
+| `OFF` | any | Deactivate actuator immediately |
+| `STANDBY` | `false` | Idle — do nothing, wait for next sync |
+| `STANDBY` | `true` | Evaluate locally: activate actuator if current humidity reading is below `humidity_threshold` |
+
+When `auto_water` is `true`, the device operates autonomously: it compares the latest humidity sensor reading against the `humidity_threshold` integer (a percentage) and activates or deactivates the pump locally without waiting for a server-side command.
+
+<Note>
+  `auto_water` is returned as a boolean (`true`/`false`) in `device_control`, but it is stored as the string `"true"` or `"false"` in `device_properties`. The backend handles the cast before sending the response — the ESP32 always receives a JSON boolean.
+</Note>
+
+---
+
+## Recommended Polling Pattern
+
+| Action | Endpoint | Recommended Frequency |
+|---|---|---|
+| Boot sync | `GET /api/device/sync` | On every power-up, then every 5 minutes |
+| Sensor push | `POST /api/sensor-data` | Per measurement cycle (device-specific, e.g. every 30 s) |
+
+<Note>
+  The sensor data response always includes the latest `device_control` block, so the ESP32 does not need an extra sync call between measurement cycles. The 5-minute periodic sync is a safety net to pick up property changes made while the device was between measurement cycles.
+</Note>
+
+<CardGroup cols={2}>
+  <Card
+    title="Device Overview"
+    icon="server"
+    href="devices/overview"
+  >
+    Understand the full device lifecycle — from admin provisioning through user claiming and decommission.
+  </Card>
+  <Card
+    title="Device Properties"
+    icon="sliders"
+    href="devices/properties"
+  >
+    Full reference for all standard property keys and how to update them from a mobile client.
+  </Card>
+</CardGroup>

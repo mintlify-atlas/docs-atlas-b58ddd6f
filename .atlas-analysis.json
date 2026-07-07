@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Smart Enviro Backend",
+  "projectType": "api-service",
+  "projectName": "Smart Enviro Backend",
+  "projectDescription": "A Laravel-based REST API backend for managing IoT environmental monitoring devices, receiving and storing sensor telemetry from ESP32 hardware, and providing real-time actuator control.",
   "theme": "luma",
-  "colors": {
-    "primary": "#2E7D32",
-    "light": "#A5D6A7",
-    "dark": "#1B5E20"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/GaelCeballos/Smart_Enviro_Backend"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/GaelCeballos/Smart_Enviro_Backend"
-    }
-  },
+  "primaryColor": "#2E7D32",
+  "lightColor": "#A5D6A7",
+  "darkColor": "#1B5E20",
   "navigation": {
     "tabs": [
       {
@@ -84,5 +72,33 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Laravel Sanctum token-based authentication with single-session enforcement",
+    "ESP32 device sync endpoint for bidirectional command and configuration delivery",
+    "Sensor telemetry ingestion with device token authentication",
+    "Actuator state control (ON/OFF/STANDBY) via mobile app API",
+    "Device property management for configurable thresholds and automation settings",
+    "Historical sensor data aggregation by hour, day, or month for charting",
+    "Device discovery and user-claiming workflow",
+    "Docker-based deployment with MySQL and Redis via Laravel Sail"
+  ],
+  "publicApiSurface": [
+    "POST /api/login",
+    "POST /api/register",
+    "DELETE /api/logout",
+    "GET /api/user",
+    "GET /api/device/sync",
+    "GET /api/my-devices",
+    "GET /api/my-devices/{id}",
+    "POST /api/my-devices/{id}/toggle",
+    "PUT /api/my-devices/{id}/properties",
+    "GET /api/devices/available",
+    "POST /api/devices/{id}/add",
+    "POST /api/sensor-data",
+    "GET /api/sensor-data",
+    "GET /api/sensor-data/{id}",
+    "DELETE /api/sensor-data/{id}",
+    "GET /api/sensor-data/history"
+  ]
 }
