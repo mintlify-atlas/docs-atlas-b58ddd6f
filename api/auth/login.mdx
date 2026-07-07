@@ -1,7 +1,7 @@
 ---
 title: "POST /api/login — Authenticate and Get Bearer Token"
-sidebarTitle: "POST /api/login"
-description: "POST /api/login — Validates email and password, creates a Sanctum personal access token, and enforces single-session policy. Returns user object and bearer token."
+sidebarTitle: "User Login"
+description: "Validates email and password, issues a Sanctum bearer token, and enforces one active session per user. Returns 409 if the account is already in use."
 ---
 
 The login endpoint validates a user's credentials and issues a Laravel Sanctum personal access token. Smart Enviro Backend enforces a single active session per user — if the account already has an active token stored in `users.current_token`, the request returns `409 Conflict` without revoking the existing session.

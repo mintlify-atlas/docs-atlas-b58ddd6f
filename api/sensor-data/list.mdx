@@ -1,7 +1,7 @@
 ---
-title: "GET /api/sensor-data — List Sensor Readings with Pagination"
-sidebarTitle: "GET /sensor-data"
-description: "GET /api/sensor-data — Returns paginated sensor readings (50 per page) ordered newest-first. Filter by device_id or sensor_type_id. Includes device name and sensor type details."
+title: "List Paginated Sensor Readings — GET /api/sensor-data"
+sidebarTitle: "List Readings"
+description: "Returns paginated sensor readings (50 per page), newest-first. Filter by device_id or sensor_type_id. Includes device and sensor type details."
 ---
 
 Returns a paginated list of all sensor readings, ordered from newest to oldest (50 per page). Supports optional filtering by device or sensor type. Each reading includes the device name and sensor type name and unit via eager-loaded relationships.

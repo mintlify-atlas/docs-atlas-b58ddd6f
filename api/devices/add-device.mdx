@@ -1,7 +1,7 @@
 ---
-title: "POST /api/devices/{id}/add — Claim a Device to Your Account"
-sidebarTitle: "POST /add"
-description: "POST /api/devices/{id}/add — Assigns an unclaimed device to the authenticated user's account. Creates a DEVICE_ADDED log entry. Returns 201 with the device details."
+title: "Add Device — POST /api/devices/{id}/add to Claim"
+sidebarTitle: "Add Device"
+description: "POST /api/devices/{id}/add — Claims an unassigned active device for the authenticated user. Returns 201 with id, name, device_token, type, and is_online."
 ---
 
 Claims an available (unassigned) device and links it to the authenticated user's account. Once claimed, the device appears in `GET /api/my-devices` and only the owner can control it. A `DEVICE_ADDED` log entry is created containing the user's ID and email as the payload.

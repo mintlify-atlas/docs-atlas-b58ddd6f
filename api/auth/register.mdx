@@ -1,7 +1,7 @@
 ---
-title: "POST /api/register — Create a New User Account"
-sidebarTitle: "POST /api/register"
-description: "POST /api/register — Creates a new user account with name, email, and password. Password must be confirmed. Returns 201 on success without issuing a token."
+title: "POST /api/register — Register a New User Account"
+sidebarTitle: "User Register"
+description: "Creates a new user with name, email, and confirmed password. Returns 201 Created on success; no token is issued — call POST /api/login to authenticate."
 ---
 
 The register endpoint creates a new user account in Smart Enviro Backend. On success, it returns a `201 Created` response without issuing a token — clients must call `POST /api/login` separately to obtain a bearer token and begin an authenticated session.

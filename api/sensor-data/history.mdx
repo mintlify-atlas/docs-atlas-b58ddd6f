@@ -1,7 +1,7 @@
 ---
-title: "GET /api/sensor-data/history — Aggregated Sensor History for Charts"
-sidebarTitle: "GET /history"
-description: "GET /api/sensor-data/history — Returns averaged sensor readings grouped by hour (day), day (week/month). Requires auth. Use for time-series charts in dashboards."
+title: "Aggregated Sensor History — GET /api/sensor-data/history"
+sidebarTitle: "Sensor History"
+description: "Returns averaged sensor readings grouped by hour (day) or day (week/month). Requires Bearer auth. Use for rendering time-series charts in dashboards."
 ---
 
 Returns sensor readings averaged over time intervals for chart rendering. For a daily view, readings are averaged per hour over the last 24 hours. For weekly and monthly views, readings are averaged per calendar day. This endpoint requires Bearer token authentication.

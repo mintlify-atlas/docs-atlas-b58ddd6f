@@ -1,7 +1,7 @@
 ---
-title: "POST /api/sensor-data — Submit a Sensor Reading from ESP32"
-sidebarTitle: "POST /sensor-data"
-description: "POST /api/sensor-data — Authenticates via device_token, stores a sensor reading, updates device online status, and returns the device_control block with the current actuator command."
+title: "Submit a New Sensor Reading — POST /api/sensor-data"
+sidebarTitle: "Store Reading"
+description: "Submit a sensor reading from an ESP32. Authenticates via device_token, stores the reading, and returns the device_control block with actuator commands."
 ---
 
 The primary ingestion endpoint for ESP32 devices to submit sensor readings. The device authenticates with its `device_token` (not a Bearer token), the backend validates the sensor metric key, stores the reading, updates the device's last-seen timestamp, and returns a `device_control` block with the current actuator command and automation settings.

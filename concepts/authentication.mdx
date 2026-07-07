@@ -1,7 +1,7 @@
 ---
-title: "Authenticate Requests to Smart Enviro Backend"
+title: "Smart Enviro Backend: Sanctum and ESP32 device_token Auth"
 sidebarTitle: "Authentication"
-description: "Smart Enviro Backend uses two independent auth systems: Laravel Sanctum Bearer tokens for mobile/web clients and device_token strings for ESP32 hardware. Learn how each works."
+description: "Two independent auth mechanisms: Sanctum Bearer tokens for mobile and web clients, plus a static device_token query parameter for ESP32 hardware devices."
 ---
 
 Smart Enviro Backend uses two completely separate authentication mechanisms depending on the caller. Mobile apps and web dashboards authenticate with **Laravel Sanctum Bearer tokens** — short-lived secrets tied to a user account and passed in the `Authorization` header. ESP32 microcontrollers authenticate with a **static `device_token`** string baked into the firmware at provisioning time and passed as a query parameter or request body field. These two systems never intersect: device tokens cannot call user-protected endpoints, and Sanctum tokens cannot be used to submit sensor data.
@@ -145,10 +145,8 @@ curl -X POST http://localhost/api/sensor-data \
   -H "Content-Type: application/json" \
   -d '{
     "device_token": "your64chartoken",
-    "readings": [
-      { "metric_key": "temp_amb", "value": 24.5 },
-      { "metric_key": "humedad_suelo", "value": 61.2 }
-    ]
+    "sensor_type_id": "temp_amb",
+    "value": 24.5
   }'
 ```
 

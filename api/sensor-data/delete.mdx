@@ -1,7 +1,7 @@
 ---
-title: "DELETE /api/sensor-data/{id} — Permanently Delete a Reading"
-sidebarTitle: "DELETE /sensor-data/{id}"
-description: "DELETE /api/sensor-data/{id} — Permanently removes a sensor reading from the database. Intended for admin use to correct data errors or remove stale entries."
+title: "Delete Sensor Reading — DELETE /api/sensor-data/{id}"
+sidebarTitle: "Delete Reading"
+description: "Permanently removes a sensor reading by ID. No auth required. Returns 200 on success or 404 if the reading is not found in the database."
 ---
 
 Permanently deletes a sensor reading by ID. This is a hard delete — the record is removed from the `sensor_data` table and cannot be recovered. Intended for administrative use to correct data entry errors or clean up stale readings.

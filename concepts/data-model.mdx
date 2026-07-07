@@ -1,7 +1,7 @@
 ---
 title: "Smart Enviro Backend Database Schema and Data Model"
 sidebarTitle: "Data Model"
-description: "Complete schema reference for Smart Enviro Backend: users, devices, device_properties, sensor_types, sensor_data, and device_logs tables with relationships and index strategy."
+description: "MySQL schema reference for Smart Enviro Backend: column types, constraints, composite indexes, and Eloquent relationships across all six database tables."
 ---
 
 Smart Enviro Backend persists all of its state across six MySQL tables. Users own devices — a single `user_id` foreign key ties each device to its owner, and that key is set to `NULL` when the user is deleted rather than cascading the delete, so orphaned devices remain available for re-adoption. Devices in turn own three dependent record types: key-value configuration pairs (`device_properties`), time-series telemetry readings (`sensor_data`), and an append-only activity journal (`device_logs`). Sensor readings are further categorised through a shared `sensor_types` lookup table that defines the name, machine-readable metric key, and unit of measure for each observable quantity.

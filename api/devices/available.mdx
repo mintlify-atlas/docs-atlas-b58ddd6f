@@ -1,7 +1,7 @@
 ---
 title: "GET /api/devices/available — List Unclaimed Devices"
-sidebarTitle: "GET /available"
-description: "GET /api/devices/available — Returns all active devices with no assigned owner. Use this endpoint to discover ESP32 devices on the network before claiming them."
+sidebarTitle: "Available Devices"
+description: "GET /api/devices/available — Lists active devices with no owner. Filters by user_id IS NULL and is_active=true. Use to discover devices before claiming."
 ---
 
 Returns all active devices that have not yet been assigned to any user (`user_id IS NULL`). Use this endpoint to populate a device discovery UI before calling `POST /api/devices/{id}/add` to claim a device.

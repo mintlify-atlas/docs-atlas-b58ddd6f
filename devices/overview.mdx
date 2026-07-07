@@ -1,7 +1,7 @@
 ---
-title: "Device Management in Smart Enviro Backend"
+title: "Smart Enviro Backend: Device Management and Lifecycle"
 sidebarTitle: "Overview"
-description: "Learn how devices are registered, discovered, claimed by users, and controlled through the Smart Enviro Backend API. Covers device lifecycle from provisioning to decommission."
+description: "How ESP32 devices are registered, discovered, claimed, and controlled through the Smart Enviro Backend REST API, from provisioning to decommission."
 ---
 
 A device in Smart Enviro Backend represents a physical ESP32 microcontroller registered in the database with a unique `mac_address` and `device_token`. Devices start unassigned — they have no `user_id` — and must be claimed by a user before they can be controlled. Once claimed, the owner has full control over the device's state and configuration.
@@ -75,7 +75,7 @@ Logs are created automatically by the API in two situations:
 | `POST /api/devices/{id}/add` | `DEVICE_ADDED` | Records which user claimed the device, including their `user_id` and email |
 | `PUT /api/my-devices/{id}/properties` | `COMMAND` | Records which property key was changed and stores `new_value` in the payload |
 
-Additional `log_type` values that can be written programmatically include `EVENT`, `INFO`, and `ERROR` for custom instrumentation.
+The `payload` JSON object can hold any additional context relevant to the event, such as the old or new value of a property.
 
 <CardGroup cols={2}>
   <Card

@@ -1,5 +1,5 @@
 ---
-title: "Get Started with Smart Enviro Backend"
+title: "Quick Start: Set Up Smart Enviro Backend with Docker Sail"
 sidebarTitle: "Quickstart"
 description: "Set up Smart Enviro Backend locally using Docker and Laravel Sail, run migrations, and make your first authenticated API call in under 10 minutes."
 ---
@@ -31,6 +31,21 @@ This guide walks you through cloning the repository, spinning up MySQL 8 and Red
     ```bash
     git clone https://github.com/GaelCeballos/Smart_Enviro_Backend.git && cd Smart_Enviro_Backend
     ```
+  </Step>
+
+  <Step title="Install Composer dependencies">
+    The `vendor/` directory is not committed to source control. Use Docker to run Composer without a local PHP installation:
+
+    ```bash
+    docker run --rm \
+      -u "$(id -u):$(id -g)" \
+      -v "$(pwd):/var/www/html" \
+      -w /var/www/html \
+      laravelsail/php84-composer:latest \
+      composer install --ignore-platform-reqs
+    ```
+
+    This populates `vendor/` and makes the `./vendor/bin/sail` command available for all subsequent steps.
   </Step>
 
   <Step title="Copy the environment file">

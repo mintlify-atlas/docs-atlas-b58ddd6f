@@ -1,7 +1,7 @@
 ---
 title: "Smart Enviro Backend: IoT API for Environmental Monitoring"
 sidebarTitle: "Introduction"
-description: "Smart Enviro Backend is a Laravel 11 REST API that receives ESP32 sensor telemetry, delivers actuator commands, and exposes a device management surface for mobile clients."
+description: "A Laravel REST API that ingests ESP32 sensor telemetry, delivers actuator commands, and exposes a device management surface for mobile and web clients."
 ---
 
 Smart Enviro Backend is a Laravel REST API purpose-built for IoT smart environmental monitoring. It acts as the central hub between ESP32 microcontrollers deployed in the field and the mobile or web clients that observe and control them. On every sync cycle the ESP32 devices POST their sensor readings to the API, which persists the telemetry in MySQL and immediately returns any queued actuator commands — keeping physical hardware in sync with user intent without requiring a persistent connection. Laravel Sanctum secures all user-facing endpoints with single-session API tokens, while a separate device-token mechanism allows embedded firmware to authenticate without a full user identity.
@@ -24,7 +24,7 @@ Smart Enviro Backend is a Laravel REST API purpose-built for IoT smart environme
   <Card title="Device Discovery" icon="magnifying-glass" href="devices/overview">
     Users browse unclaimed devices through `/api/devices/available` and claim ownership via `/api/devices/{id}/add`, enabling a zero-configuration onboarding workflow.
   </Card>
-  <Card title="Historical Data" icon="chart-line" href="api/sensor-data/store">
+  <Card title="Historical Data" icon="chart-line" href="api/sensor-data/history">
     The `/api/sensor-data/history` endpoint returns aggregated telemetry that can be bucketed by hour, day, or month for trend analysis in dashboards.
   </Card>
 </CardGroup>
@@ -33,7 +33,7 @@ Smart Enviro Backend is a Laravel REST API purpose-built for IoT smart environme
 
 | Layer | Technology |
 | :--- | :--- |
-| **Backend** | PHP 8.4 + Laravel 11 |
+| **Backend** | PHP 8.4 + Laravel 13 |
 | **Authentication** | Laravel Sanctum (API Tokens) |
 | **Database** | MySQL 8.x |
 | **Cache / Queues** | Redis 7.x |

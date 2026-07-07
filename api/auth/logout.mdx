@@ -1,7 +1,7 @@
 ---
 title: "DELETE /api/logout — Revoke Current Session Token"
-sidebarTitle: "DELETE /api/logout"
-description: "DELETE /api/logout — Revokes the current Sanctum bearer token and clears the single-session lock, allowing the user to log in from another device."
+sidebarTitle: "User Logout"
+description: "Revokes the current Sanctum bearer token and clears the single-session lock on logout, allowing the user to log in again from any device."
 ---
 
 The logout endpoint revokes the current bearer token and clears the `current_token` field on the user record, releasing the single-session lock enforced by Smart Enviro Backend. After calling this endpoint, the same credentials can be used to log in from any device.

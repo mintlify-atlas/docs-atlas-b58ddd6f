@@ -1,7 +1,7 @@
 ---
-title: "GET /api/device/sync — ESP32 Boot Sync and Command Fetch"
-sidebarTitle: "GET /device/sync"
-description: "GET /api/device/sync — Called by ESP32 on boot and periodically. Authenticates the device_token, updates online status, and returns the current command and configuration properties."
+title: "ESP32 Device Sync — Boot, Command, and Config Fetch"
+sidebarTitle: "Device Sync"
+description: "GET /api/device/sync — Public ESP32 endpoint. Sends device_token as a query param to get the current command and config. Returns SLEEP on invalid token."
 ---
 
 This is the primary endpoint for ESP32 devices to synchronize with the backend. The device sends its `device_token` as a query parameter and receives its current command (`ON`, `OFF`, or `STANDBY`) and the full set of configuration properties. This endpoint requires no user authentication — only the device token.

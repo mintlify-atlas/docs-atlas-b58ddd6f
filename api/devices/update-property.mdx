@@ -1,7 +1,7 @@
 ---
-title: "PUT /api/my-devices/{id}/properties — Update Device Configuration"
-sidebarTitle: "PUT /properties"
-description: "PUT /api/my-devices/{id}/properties — Upserts a key-value property on a device. Creates the property if it doesn't exist; updates it if it does. Logs the change to device_logs."
+title: "Update Device Property — PUT /api/my-devices/{id}"
+sidebarTitle: "Update Property"
+description: "PUT /api/my-devices/{id}/properties — Upserts a device config property by key. Both fields are required strings. Logs a COMMAND entry on every change."
 ---
 
 Updates or creates a configuration property on a device owned by the authenticated user. Properties are key-value pairs (both stored as strings) that configure device behavior such as automation thresholds and hardware capabilities. Each update is recorded in the device's log as a `COMMAND` entry.
@@ -70,7 +70,7 @@ The property was created or updated successfully. A `COMMAND` log entry is writt
 ```json
 {
   "status": "success",
-  "message": "Configuración guardada correctamente"
+  "message": "Configuración guardad correctamente"
 }
 ```
 
@@ -79,7 +79,7 @@ The property was created or updated successfully. A `COMMAND` log entry is writt
 </ResponseField>
 
 <ResponseField name="message" type="string">
-  Human-readable confirmation that the configuration was saved.
+  Confirmation that the configuration was saved. The message text is returned verbatim from the controller.
 </ResponseField>
 
 ### 404 Not Found

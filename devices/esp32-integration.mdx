@@ -1,7 +1,7 @@
 ---
 title: "Integrate ESP32 Hardware with Smart Enviro Backend"
 sidebarTitle: "ESP32 Integration"
-description: "Step-by-step guide for connecting ESP32 microcontrollers to Smart Enviro Backend: boot sync, sensor data push, actuator command handling, and recommended polling intervals."
+description: "Connect an ESP32 to Smart Enviro Backend: boot sync, sensor data push, and actuator command handling using device_token authentication."
 ---
 
 Smart Enviro Backend is designed for bidirectional communication with ESP32 microcontrollers. The device authenticates using a `device_token` (not a user token), syncs its configuration on boot, and pushes sensor readings in exchange for actuator control instructions. No user credentials are ever stored on the hardware.

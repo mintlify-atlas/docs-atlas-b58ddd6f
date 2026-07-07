@@ -1,7 +1,7 @@
 ---
-title: "Smart Enviro Backend Architecture Overview"
+title: "Smart Enviro Backend: System Architecture Overview"
 sidebarTitle: "Architecture"
-description: "How Smart Enviro Backend connects ESP32 microcontrollers, mobile clients, and the Laravel API server through device tokens, Sanctum bearer tokens, and a MySQL telemetry store."
+description: "How Smart Enviro Backend connects ESP32 devices, mobile clients, and a Laravel 11 API with device tokens, Sanctum Bearer auth, and a MySQL store."
 ---
 
 Smart Enviro Backend is structured around three distinct layers that never share authentication mechanisms. At the hardware layer, ESP32 microcontrollers authenticate exclusively with a static `device_token` stored in the `devices` table — no session cookies, no bearer headers. In the middle sits the Laravel 11 API server (PHP 8.4 + Laravel Sanctum), which routes requests, enforces access control, and persists all telemetry to MySQL. At the top, mobile apps and web dashboards authenticate with Sanctum Bearer tokens obtained at login, then call the full suite of device-management and sensor-history endpoints.
@@ -14,7 +14,6 @@ Smart Enviro Backend is structured around three distinct layers that never share
 | **Laravel API** | PHP 8.4 application handling routing, `auth:sanctum` middleware, business logic via controllers, and persistence to MySQL |
 | **Mobile/Web Client** | Authenticates with a Sanctum Bearer token; discovers and claims unowned devices; toggles actuator states; queries sensor history |
 | **MySQL 8.x** | Persists all application data across six tables: `users`, `devices`, `device_properties`, `sensor_types`, `sensor_data`, `device_logs` |
-| **Redis 7.x** | Cache and queue backend for the Laravel application |
 
 ## Request Flow
 
@@ -45,7 +44,7 @@ Smart Enviro Backend is structured around three distinct layers that never share
     At each measurement interval the device posts to `POST /api/sensor-data` with `device_token` in the request body alongside the sensor readings. The API validates the token, resolves the device, and writes one `sensor_data` row per reading.
   </Step>
   <Step title="Receive Updated Control State">
-    The sync and sensor-data responses both carry a `device_control` payload so the ESP32 always knows the latest commanded state (`ON`, `OFF`, or `STANDBY`) without needing a persistent connection.
+    Both the sync response (`command` + `config`) and the sensor-data store response (`device_control` block) return the latest commanded state (`ON`, `OFF`, or `STANDBY`) so the ESP32 can update its behaviour without a persistent connection. The sync response includes the full `config` key-value map of device properties; the sensor-data response includes derived control flags such as `auto_water` and `humidity_threshold`.
   </Step>
 </Steps>
 

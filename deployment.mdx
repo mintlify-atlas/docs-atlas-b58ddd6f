@@ -1,7 +1,7 @@
 ---
-title: "Deploy Smart Enviro Backend with Docker"
+title: "Deploy Smart Enviro Backend using Docker and Apache"
 sidebarTitle: "Deployment"
-description: "Deploy Smart Enviro Backend to production using the included Dockerfile with PHP 8.4 Apache, MySQL 8, and Redis. Configure environment variables for your target environment."
+description: "Ship Smart Enviro Backend to production using the included PHP 8.4 Apache Dockerfile, Laravel Sail for development, and all required environment variables."
 ---
 
 Smart Enviro Backend ships with a production-ready `Dockerfile` based on the official `php:8.4-apache` image. The build installs all system-level dependencies, compiles the PHP extensions required by Laravel (`pdo_mysql`, `mbstring`, `exif`, `pcntl`, `bcmath`, `gd`), enables Apache's `mod_rewrite` module for clean URL routing, and sets the Apache document root to Laravel's `public/` directory. Composer dependencies are installed without dev packages using `--no-dev --optimize-autoloader`, and storage directories are pre-configured with the correct `www-data` ownership and `775` permissions.
@@ -185,7 +185,7 @@ Run the following commands before building a production image to ensure the code
 **Auto-format with Laravel Pint:**
 
 ```bash
-./vendor/bin/sail artisan pint
+./vendor/bin/sail exec laravel.test ./vendor/bin/pint
 ```
 
 Pint reformats PHP files to the project's configured style rules. Commit any resulting changes before pushing.

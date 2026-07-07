@@ -1,7 +1,7 @@
 ---
 title: "Configure Device Properties in Smart Enviro Backend"
 sidebarTitle: "Properties"
-description: "Device properties are key-value pairs stored per-device that configure thresholds, automation behavior, and hardware capabilities reported to the ESP32 on each sync."
+description: "Smart Enviro Backend device properties set automation thresholds and hardware capabilities, returned to the ESP32 on every sync and sensor-data call."
 ---
 
 Device properties are a flexible key-value store (the `device_properties` table) that lets mobile clients configure per-device behavior without changing firmware. Each property has a `property_key` and `property_value` string, and the full set is returned to the ESP32 on every sync and sensor-data response. This means a user can change a threshold in the app and the device will act on it within one measurement cycle — no OTA update required.
